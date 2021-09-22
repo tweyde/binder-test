@@ -1,2 +1,2 @@
 install.packages("readr")
-nstall.packages("knitr")
+install.packages("knitr")
