@@ -1,0 +1,188 @@
+---
+title: "Basics of R"
+author: "Maya Gopal and Ram Gopal"
+date: "Summer 2020"
+output:
+  word_document:
+    toc: yes
+  html_document:
+    highlight: tango
+    theme: united
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+In this first lesson, we will explore two basic data structures that are very useful: vectors and dataframes. Vectors are one dimensional and dataframes are two dimensional objects.  
+But first, let's get the necessary software to begin coding.
+
+# Getting Started with R
+R is a free, open source software program for statistical analysis. First, download the R software from the following link.
+
+[The R Project for Statistical Computing]( https://cran.r-project.org/)
+
+RStudio is the most popular integrated development environment (IDE) for R. Download R Studio after you have installed R.
+
+[R Studio](https://rstudio.com/products/rstudio/#rstudio-desktop)  
+
+Once you have installed these two, open R Studio and you should see the following.  
+![](RStudio.png)
+
+
+
+
+# Simple Computations
+
+Create a new script file (see the figure above). Let us begin with simple computations in R using `*`,`/`,`sqrt()`,`exp()`, and `log()` operators and functions. 
+
+```{r}
+25*77  
+25/5  
+sqrt(77)  
+exp(2.5)  
+log(55) 
+```
+ 
+# Creating Vectors
+
+To create a vector, the appropriate syntax is `v = c()`. An example is:
+
+```{r}
+v = c(1,2,4,63,7,5)
+```
+
+To create a vector of a sequence, we use `seq()`.  
+
+```{r}
+vec1 = seq(1,5)
+vec1
+vec2 = seq(2,55,by = 3)
+vec2
+```
+
+The option `by` in the sequence function allows you to increment by any value. 
+
+To create a vector that repeats a number, character, or a vector of numbers or 
+characters, we use `rep()`. Characters must be in quotations. 
+
+```{r}
+vec1 = rep(1,10)
+vec1
+vec2 = rep(c(3,4,5),3)
+vec2
+vec3 = rep("c",5)
+vec3
+```
+
+The second element in parenthesis is the number of times you want the first 
+element to be repeated. 
+
+To find the sum of a vector, we use the command `sum()`.
+
+```{r}
+sum(vec1)
+```
+
+The following are other useful vector based functions in R.     
+
+`min(x)` - minimum value of vector x    
+`max(x)` - maximum value of vector x  
+`mean(x)` - mean value of vector x  
+`median(x)` - median value of vector x  
+`quantile(x, p)` - pth quantile of vector x  
+`sd(x)` - standard deviation of vector x  
+`var(x)` - variance of vector x  
+`IQR(x)` - Inter Quartile Range (IQR) of vector x  
+`diff(range(x))` - total range of vector x  
+
+Let us create three vectors to store information about weight, height, and gender. since gender is not numeric data, we use quotation marks when creating the vector.
+
+Note that initially, the gender vector is character. This can be seen using the
+`class()` command. The gender vector must be a factor (or more commonly refered to as 
+categorical data) in order to be plotted, 
+and thus we write `factor(gender)` in the parenthesis of the `plot()` command.
+
+```{r}
+weight = c(60,72,57,90,95,72)
+height = c(1.75,1.8,1.65,1.9,1.74,1.91)
+gender = c("m","f","m","f","f","m")
+gender
+class(gender)
+```
+
+Using the `plot()` command, we can plot these vectors as scatterplots or boxplots. The order within the parenthesis is the variable you want on the x axis, then the variable you want on the y axis. `col` can be used to change the color of the dots in a 
+scatterplot, and `pch` changes the design of the dots. 
+
+```{r}
+plot(factor(gender),weight)
+plot(weight,height,col = "red",pch=9)
+```
+
+# Creating Data Frames
+
+A data frame is a two dimensional variable. To create a data frame called **ghw** using these three vectors, we use the command `data.frame()`. `View()` is a key command that allows you to see the data frame as a table in a separate tab. 
+
+```{r}
+ghw=data.frame(gender,height,weight)
+ghw
+View(ghw)
+```
+
+Now that the data frame is created, if you want to plot two variables from the 
+data frame with the `plot()` command, you must specify both the data frame and 
+the variable from the data frame. The appropriate syntax is, for example, 
+`ghw$weight`, `ghw$height`, and `ghw$gender`. 
+
+```{r}
+plot(ghw$weight,ghw$height)
+```
+
+## Information about Data Frames
+
+If you need a quick summary of the structure or contents of a data frame, there
+are a few helpful commands. `summary()` gives you the min, max, mean, median, 
+and 1st and 3rd quartiles of numerical data, and the length, class, and mode of 
+categorical data. `dim()` gives you the number of rows and columns of your data
+frame. `str()` gives you the first few elements of each variable. `head()` gives 
+you the first few rows of the data frame. 
+
+```{r}
+summary(ghw)
+dim(ghw)
+str(ghw)
+head(ghw)
+```
+
+To see the full data frame in another tab, use the `View()` command. 
+
+```{r}
+View(ghw)
+```
+
+## Adding Columns
+
+You can add columns to a data frame based on the data from existing columns. Let's calcuate the Body Mass Index which is defined as:
+
+$$ bmi = {{weight}\over{height^2}}$$
+
+```{r}
+ghw$bmi = ghw$weight/ghw$height^2
+knitr::kable(ghw)
+```
+
+
+# Some Useful Resources
+
+1. The R reference card is very useful if you want to look up the basic syntax. You are strongly recommended to download and keep it handy as you work to get comfortable with coding in R. [R Reference Card](https://cran.r-project.org/doc/contrib/Short-refcard.pdf) 
+2. There are a number of other cheatsheets for specific packages and functionalities. You can find a list of them at [Cheatsheets](https://rstudio.com/resources/cheatsheets/>)  
+3. [Quick-R](https://www.statmethods.net/)
+4. [The R Journal](https://journal.r-project.org/)
+5. [Books](https://rstudio.com/resources/books/)
+
+
+
+
+
+
