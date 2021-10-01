@@ -8,4 +8,3 @@ texlive-latex-recommended
 texlive-publishers
 texlive-science
 texlive-xetex
-cm-super
