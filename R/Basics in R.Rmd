@@ -1,7 +1,7 @@
 ---
 title: "Basics of R"
 author: "Maya Gopal and Ram Gopal"
-date: "Summer 2020"
+date: "2021"
 output:
   pdf_document:
     toc: yes
