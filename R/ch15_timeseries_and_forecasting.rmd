@@ -1,0 +1,23 @@
+---
+title: "ch15"
+output: html_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+## Timeseries make-up: Trend, Seasonality and Noise
+
+```{r}
+library(xts)
+df <- read.csv(file = '../data/TOTALNSA.csv')
+df[['DATE']] <- as.Date(df[['DATE']], format='%Y-%m-%d')
+df <- ts(df$TOTALNSA, start = '1976', freq=12)
+plot(decompose(df))
+```
+
+
+
