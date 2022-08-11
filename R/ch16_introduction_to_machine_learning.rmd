@@ -1,0 +1,70 @@
+---
+title: "Chapter 16"
+author: "Stefan Diener"
+date: "2022-07-27"
+output: html_document
+---
+### Example: Fitting a Decision Tree for Classification
+```{r}
+library(datasets)
+data(iris)
+print(unique(iris$Species))
+print(names(iris[,1:4]))
+print(nrow(iris))
+print(iris[1,])
+```
+
+
+```{r}
+library(caret)
+set.seed(538)                              
+index <- createDataPartition(iris$Species,p=0.5,list=FALSE)
+train = iris[index,]
+test = iris[-index,]
+```
+
+
+```{r}
+suppressMessages(library(rattle))
+library(rpart)
+clf_full <- rpart(Species~., data=train, control=rpart.control(minsplit=2, minbucket = 1, cp=-1))
+fancyRpartPlot(clf_full)
+
+```
+```{r}
+print(train[1,])
+predict(clf_full, newdata = test[1,])
+```
+```{r}
+total = nrow(train)
+correct = 0
+for(i in 1:total){
+  if(train$Species[i] == predict(clf_full, newdata = train[i,], type="class")){
+    correct = correct + 1
+  }
+}
+accuracy = correct / total
+accuracy
+```
+
+
+
+### Generalization, overfitting and regularization
+
+
+```{r}
+sum(predict(clf_full, newdata = test, type="class") == test$Species)/nrow(test)
+```
+, control=rpart.control(maxdepth=30)
+
+```{r}
+clf_small <- rpart(Species~., data=train, control=rpart.control(maxdepth=2))
+fancyRpartPlot(clf_small)
+```
+
+
+```{r}
+train_acc <- sum(predict(clf_small, newdata = train, type="class") == test$Species)/nrow(train)
+test_acc <- sum(predict(clf_small, newdata = test, type="class") == test$Species)/nrow(test)
+print(cat("Training accuracy: ", train_acc, "Test accuracy: ", test_acc))
+```
