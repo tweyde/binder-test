@@ -5,6 +5,20 @@ date: "2022-07-27"
 output: html_document
 ---
 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require("xts")){
+  install.packages("xts")
+}
+
+if(!require("forecast")){
+  install.packages("forecast")
+}
+
+```
+
 ```{r}
 library(xts)
 df_raw <- read.csv(file = '../data/TOTALNSA.csv')
@@ -51,7 +65,11 @@ summary(res)
 
 
 ```{r}
-# Can't find a good equivalent to statmodels' ar_select_order in R
+
+(auto_reg <- stats::ar(df_ma, order.max = 12))
+
+auto_reg$aic
+
 ```
 
 ```{r}
@@ -59,7 +77,7 @@ summary(res)
 model <- arima(df_ma, c(2,0,0), method = "CSS-ML") # Produces an ARIMA[2,0,0]
 
 autoplot(df_ma) +
-  autolayer(predict(res, n.ahead = 120)$pred)
+  autolayer(predict(auto_reg, n.ahead = 120)$pred)
 
 ```
 
