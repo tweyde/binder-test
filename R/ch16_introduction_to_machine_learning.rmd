@@ -19,8 +19,8 @@ print(iris[1,])
 library(caret)
 set.seed(538)                              
 index <- createDataPartition(iris$Species,p=0.5,list=FALSE)
-train = iris[index,]
-test = iris[-index,]
+train <- iris[index,]
+test <- iris[-index,]
 ```
 
 
@@ -36,14 +36,14 @@ print(train[1,])
 predict(clf_full, newdata = test[1,])
 ```
 ```{r}
-total = nrow(train)
-correct = 0
+total <- nrow(train)
+correct <- 0
 for(i in 1:total){
   if(train$Species[i] == predict(clf_full, newdata = train[i,], type="class")){
     correct = correct + 1
   }
 }
-accuracy = correct / total
+accuracy <- correct / total
 accuracy
 ```
 
