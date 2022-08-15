@@ -55,7 +55,7 @@ accuracy
 ```{r}
 sum(predict(clf_full, newdata = test, type="class") == test$Species)/nrow(test)
 ```
-, control=rpart.control(maxdepth=30)
+
 
 ```{r}
 clf_small <- rpart(Species~., data=train, control=rpart.control(maxdepth=2))
