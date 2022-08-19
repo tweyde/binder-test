@@ -1,12 +1,15 @@
 ---
-title: "Chapter 18 - Regression"
+title: "Chapter 18"
 author: "Stefan Diener"
 date: "2022-08-17"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-library(glmnet)
+library(glmnet) # For ridge regression and lasso
+library(RSNNS)  # For MLP
+library(rpart)  # For decision trees
+library(fdm2id)
 ```
 
 
@@ -25,12 +28,12 @@ print(dim(y))
 
 ```{r}
 # Setting seed for reproducibility
-seed = 0
+SEED = 0
 
 # First split
 smp_size <- floor( (1-0.4) * nrow(X) )
 
-set.seed(0)
+set.seed(SEED)
 train_ind <- sample(seq_len(nrow(X)), size = smp_size)
 
 X_train <- X[train_ind, ]
@@ -41,7 +44,7 @@ y_rest <- y[-train_ind, , drop=FALSE]
 # Second split
 smp_size <- floor( (1-0.5) * nrow(X_rest) )
 
-set.seed(0)
+set.seed(SEED)
 train_ind <- sample(seq_len(nrow(X_rest)), size = smp_size)
 
 X_test <- X_rest[train_ind, ]
@@ -80,7 +83,7 @@ print( paste(mean(as.matrix(X_val_scl)), sd(as.matrix(X_val_scl))) )
 
 
 ```{r}
-# Helper function for preparing dataframes
+# Helper function for preparing dataframes (merging target and features)
 df_prep <- function(features_df, target_df) {
   output_df <- merge(target_df, features_df, by='row.names', all=TRUE)
   rownames(output_df) <- output_df$Row.names
@@ -148,17 +151,16 @@ print(colnames(X_train_sc_pf1))
 
 ```{r}
 # Degree 2 polynomial feature generation function
-pf2_transform <- function(df) {
+pf2_transform <- function(df, target_name='target') {
   # Write formula for intercept, raw features, squared features, and
   # interactions
-  formula_pf2 <- as.formula(paste('target ~ .^2 +',
+  formula_pf2 <- as.formula(paste(target_name, '~ .^2 +',
                                   paste('poly(',
-                                        colnames(df)[-c(1,3)],
+                                        colnames(df)[-c(1)],
                                         ',2, raw=TRUE)[, 2]',
                                         collapse = ' + ')
                                   )
                             )
-  # We excluded sex^2 in the formula to avoid multicollinearity
   
   output <- model.matrix(formula_pf2, data = df)
   
@@ -166,15 +168,15 @@ pf2_transform <- function(df) {
   colnames_pf2 <- c("1",
                     colnames(df)[-1], # exclude target
                     paste0(colnames(df)[-1],"^2"), # include squares
-                    colnames(output)[-(1:21)]) # include interactions
+                    colnames(output)[-(1:(length(df)*2-1))]) # include interactions
   colnames(output) <- colnames_pf2
   
   # Convert to dataframe
   output_df <- data.frame(output)
   
-  # Also exclude intercept column to avoid rank deficiency issues when using
+  # Exclude intercept column to avoid rank deficiency issues when using
   # future models
-  output_df$X1 <- NULL
+  output_df[,1] <- NULL
   
   return(output_df)
 }
@@ -213,6 +215,7 @@ print(paste("Poly2 features, train RMSE:",
             rmse(X_test_sc_pf2, y_test, lr2))
       )
 
+# Not sure why the RMSEs are so much different from the ones in the Python nb
 ```
 
 ### Ridge Regression
@@ -231,18 +234,227 @@ print( paste("Ridge val   RMSE:",
 ```
 
 ```{r}
-# Train a linear model
-# Train a linear model
-lr_rd1 <- glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 0) # alpha=300?
-  # alpha = 0 ensures ridge regression
+# Find best lambda
+cv_model_rd <- cv.glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 0)
+best_lambda_rd2 <- cv_model_rd$lambda.min
 
-# predict(lr_rd1, as.matrix(X_val_sc_pf2))
+# Train a linear model
+lr_rd2 <- glmnet(as.matrix(X_train_sc_pf2), y_train$target,
+                 alpha = 0, 
+                 lambda = best_lambda_rd2)
+
 print( paste("Ridge train RMSE:",
-             rmse(as.matrix(X_train_sc_pf2),y_train,lr_rd1)) )
+             rmse(as.matrix(X_train_sc_pf2),y_train,lr_rd2)) )
 print( paste("Ridge val   RMSE:",
-             rmse(as.matrix(X_val_sc_pf2),y_val,lr_rd1)) )
+             rmse(as.matrix(X_val_sc_pf2),y_val,lr_rd2)) )
 ```
 
+```{r}
+# Training set
+y_train_hat <- predict(lr_rd2, # Prediction vector
+                       newx=as.matrix(X_train_sc_pf2),
+                       s=best_lambda_rd2)
+res_rd2 <- y_train_hat - y_train$target # Residuals vector
 
+print("Training set")
+print( paste('R^2: ',1-(var(res_rd2)/var(y_train$target))) )
+
+# Validation set
+y_val_hat <- predict(lr_rd2, # Prediction vector
+                     newx=as.matrix(X_val_sc_pf2),
+                     s=best_lambda_rd2)
+res_val_rd2 <- y_val_hat - y_val # Residuals vector
+
+print("Validation set")
+print( paste('R^2: ',1-(var(res_val_rd2)/var(y_val))) )
+
+# Test set
+y_test_hat <- predict(lr_rd2, # Prediction vector
+                      newx=as.matrix(X_test_sc_pf2),
+                      s=best_lambda_rd2)
+res_test_rd2 <- y_test_hat - y_test # Residuals vector
+
+print("Test set")
+print( paste('R^2: ',1-(var(res_test_rd2)/var(y_test))) )
+
+print(mean((res_test_rd2$target)^2)^.5)
+```
+
+### Lasso Regression
+```{r}
+# Train a linear model
+lr_lso <- glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 1)
+  # alpha = 1 ensures lasso regression
+
+# predict(lr_rd1, as.matrix(X_val_sc_pf2))
+print( paste("Lasso train RMSE:",
+             rmse(as.matrix(X_train_sc_pf2),y_train,lr_lso)) )
+print( paste("Lasso val   RMSE:",
+             rmse(as.matrix(X_val_sc_pf2),y_val,lr_lso)) )
+```
+
+I can't figure out the equivalent of sklearn Lasso and Ridge alpha arguments in R, so I am substituting that step for finding the best lambda for the model.
+```{r}
+# Find best lambda
+cv_model_lso <- cv.glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 1)
+best_lambda_lso <- cv_model_lso$lambda.min
+
+# Train a linear model
+lr_lso2 <- glmnet(as.matrix(X_train_sc_pf2), y_train$target,
+                 alpha = 1, # alpha=10?
+                 lambda = best_lambda_lso)
+
+print( paste("Lasso train RMSE:",
+             rmse(as.matrix(X_train_sc_pf2),y_train,lr_lso2)) )
+print( paste("Lasso val   RMSE:",
+             rmse(as.matrix(X_val_sc_pf2),y_val,lr_lso2)) )
+```
+
+```{r}
+# Training set
+y_train_hat <- predict(lr_lso2, # Prediction vector
+                       newx=as.matrix(X_train_sc_pf2),
+                       s=best_lambda_lso)
+res_lso2 <- y_train_hat - y_train$target # Residuals vector
+
+print("Training set")
+print( paste('R^2: ',1-(var(res_lso2)/var(y_train$target))) )
+
+# Validation set
+y_val_hat <- predict(lr_lso2, # Prediction vector
+                     newx=as.matrix(X_val_sc_pf2),
+                     s=best_lambda_lso)
+res_val_lso2 <- y_val_hat - y_val # Residuals vector
+
+print("Validation set")
+print( paste('R^2: ',1-(var(res_val_lso2)/var(y_val))) )
+
+# Test set
+y_test_hat <- predict(lr_lso2, # Prediction vector
+                      newx=as.matrix(X_test_sc_pf2),
+                      s=best_lambda_lso)
+res_test_lso2 <- y_test_hat - y_test # Residuals vector
+
+print("Test set")
+print( paste('R^2: ',1-(var(res_test_lso2)/var(y_test))) )
+
+print(mean((res_test_lso2$target)^2)^.5)
+```
+
+```{r}
+coef_vect <- coef(lr_lso2)[,1]
+print("Lasso coefficients:")
+print(coef_vect)
+
+print("Positions of non-zero coefficients:")
+print(seq(1:length(coef_vect))[coef_vect!=0])
+
+print("Names and values of non-zero coefficients:")
+print(coef_vect[coef_vect!=0])
+```
+
+### Non-linear Models
+```{r}
+# MLP regression
+mlp1 <- mlp(as.matrix(X_train_sc_pf2), y_train$target)
+
+print( paste("MLP train RMSE:", rmse(X_train_sc_pf2, y_train, mlp1)) )
+print( paste("MLP val   RMSE:", rmse(X_val_sc_pf2, y_val, mlp1)) )
+```
+
+```{r}
+# MLP regression (5 hidden layers)
+mlp2 <- MLPREG(as.matrix(X_train_sc_pf2), y_train$target, size = 5)
+
+print( paste("MLP train RMSE:", rmse(X_train_sc_pf2, y_train, mlp2)) )
+print( paste("MLP val   RMSE:", rmse(X_val_sc_pf2, y_val, mlp2)) )
+print( paste("MLP test  RMSE:", rmse(X_test_sc_pf2, y_test, mlp2)) )
+```
+
+### Regression Trees
+```{r}
+# Create a model
+dtr <- rpart(target ~ ., data = train_df)
+
+print("DT Regression:")
+print( paste("DT train RMSE:", rmse(X_train_scl, y_train, dtr)) )
+print( paste("DT val   RMSE:", rmse(X_val_scl, y_val, dtr)) )
+print( paste("DT test  RMSE:", rmse(X_test_scl, y_test, dtr)) )
+```
+
+```{r}
+# Create a model (max depth of 2)
+dtr2 <- rpart(target ~ ., data = train_df, control = list(maxdepth=2))
+
+print("DT Regression:")
+print( paste("DT train RMSE:", rmse(X_train_scl, y_train, dtr2)) )
+print( paste("DT val   RMSE:", rmse(X_val_scl, y_val, dtr2)) )
+print( paste("DT test  RMSE:", rmse(X_test_scl, y_test, dtr2)) )
+```
+
+### A Harder Learning Problem
+```{r}
+# Energy use by buildings
+dataset <- read.csv('../data/ENB2012_data.csv')
+
+# Separate target and features
+X <- dataset[,1:7]           # building attributes
+y <- dataset[,9, drop=FALSE] # heating energy
+print(dim(X))
+print(dim(y))
+
+# Train-test split
+SEED = 0
+
+smp_size <- floor( (1-0.3) * nrow(X) )
+
+set.seed(SEED)
+train_ind <- sample(seq_len(nrow(X)), size = smp_size)
+
+cX_train <- X[train_ind, ]
+cX_test <- X[-train_ind, ]
+cy_train <- y[train_ind, , drop=FALSE]
+cy_test <- y[-train_ind, , drop=FALSE]
+
+# Scaling
+cX_train <- sclr_fit_transform(cX_train)
+cX_test <- sclr_fit_transform(cX_test, cX_train)
+
+# Linear regression
+# Prep dataframes
+c_train_df <- df_prep(cX_train, cy_train)
+c_test_df <- df_prep(cX_test, cy_test)
+
+# Check for multicollinearity
+#cor(c_train_df)
+# The X1 and X2 features are highly correlated, resulting in multicollinearity
+# that makes the results unreliable. I will drop X2 to solve this problem.
+c_train_df$X2 <- NULL
+
+# Create model
+c_lr <- lm(Y1 ~ ., data = c_train_df)
+
+# Print RMSEs
+print( paste("LR train RMSE", rmse(cX_train, cy_train, c_lr)))
+print( paste("LR val RMSE", rmse(cX_test, cy_test, c_lr)))
+
+# Feature expansion
+cX_train_p2 <- pf2_transform(c_train_df, 'Y1')
+cX_test_p2 <- pf2_transform(c_test_df, 'Y1')
+
+print(colnames(X_train_sc_pf2))
+print(dim(X_train))
+print(dim(X_train_sc_pf2))
+
+```
+
+### Examples
+```{r}
+
+```
+
+```{r}
+
+```
 
 
