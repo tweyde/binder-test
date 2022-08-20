@@ -10,6 +10,7 @@ library(glmnet) # For ridge regression and lasso
 library(RSNNS)  # For MLP
 library(rpart)  # For decision trees
 library(fdm2id)
+
 ```
 
 
@@ -29,7 +30,6 @@ print(dim(y))
 ```{r}
 # Setting seed for reproducibility
 SEED = 0
-
 # First split
 smp_size <- floor( (1-0.4) * nrow(X) )
 
@@ -114,8 +114,6 @@ print( paste("Validation RMSE:", rmse(X_val_scl, y_val, lr)) )
 print( paste("Test RMSE:", rmse(X_test_scl, y_test, lr)) )
 ```
 
-
-
 ```{r}
 # Assign residuals and fitted values to variables
 y_train_hat <- lr$fitted.values
@@ -166,9 +164,10 @@ pf2_transform <- function(df, target_name='target') {
   
   # Rewrite column names for readability
   colnames_pf2 <- c("1",
-                    colnames(df)[-1], # exclude target
+                    colnames(df)[-1],              # exclude target
                     paste0(colnames(df)[-1],"^2"), # include squares
-                    colnames(output)[-(1:(length(df)*2-1))]) # include interactions
+                    colnames(output)[-(1:(length(df)*2-1))])
+                                                   # include interactions
   colnames(output) <- colnames_pf2
   
   # Convert to dataframe
@@ -188,8 +187,6 @@ print(colnames(X_train_sc_pf2))
 print(dim(X_train))
 print(dim(X_train_sc_pf2))
 ```
-
-
 
 ```{r}
 # Prepare dataframes for validation and test data
@@ -215,18 +212,16 @@ print(paste("Poly2 features, train RMSE:",
             rmse(X_test_sc_pf2, y_test, lr2))
       )
 
-# Not sure why the RMSEs are so much different from the ones in the Python nb
 ```
 
 ### Ridge Regression
 ```{r}
-# Already excluded the bias column from pf datasets (see Chunk 7)
+# Already excluded the bias column from pf datasets
 
 # Train a linear model
 lr_rd1 <- glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 0)
   # alpha = 0 ensures ridge regression
 
-# predict(lr_rd1, as.matrix(X_val_sc_pf2))
 print( paste("Ridge train RMSE:",
              rmse(as.matrix(X_train_sc_pf2),y_train,lr_rd1)) )
 print( paste("Ridge val   RMSE:",
@@ -286,14 +281,12 @@ print(mean((res_test_rd2$target)^2)^.5)
 lr_lso <- glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 1)
   # alpha = 1 ensures lasso regression
 
-# predict(lr_rd1, as.matrix(X_val_sc_pf2))
 print( paste("Lasso train RMSE:",
              rmse(as.matrix(X_train_sc_pf2),y_train,lr_lso)) )
 print( paste("Lasso val   RMSE:",
              rmse(as.matrix(X_val_sc_pf2),y_val,lr_lso)) )
 ```
 
-I can't figure out the equivalent of sklearn Lasso and Ridge alpha arguments in R, so I am substituting that step for finding the best lambda for the model.
 ```{r}
 # Find best lambda
 cv_model_lso <- cv.glmnet(as.matrix(X_train_sc_pf2), y_train$target, alpha = 1)
@@ -352,6 +345,7 @@ print(seq(1:length(coef_vect))[coef_vect!=0])
 print("Names and values of non-zero coefficients:")
 print(coef_vect[coef_vect!=0])
 ```
+
 
 ### Non-linear Models
 ```{r}
@@ -425,36 +419,62 @@ cX_test <- sclr_fit_transform(cX_test, cX_train)
 c_train_df <- df_prep(cX_train, cy_train)
 c_test_df <- df_prep(cX_test, cy_test)
 
-# Check for multicollinearity
-#cor(c_train_df)
-# The X1 and X2 features are highly correlated, resulting in multicollinearity
-# that makes the results unreliable. I will drop X2 to solve this problem.
-c_train_df$X2 <- NULL
-
 # Create model
 c_lr <- lm(Y1 ~ ., data = c_train_df)
 
 # Print RMSEs
 print( paste("LR train RMSE", rmse(cX_train, cy_train, c_lr)))
 print( paste("LR val RMSE", rmse(cX_test, cy_test, c_lr)))
+# This model is extremely overfitted, and I'm not sure why that doesn't seem to
+# be the case in the Python version
 
 # Feature expansion
-cX_train_p2 <- pf2_transform(c_train_df, 'Y1')
-cX_test_p2 <- pf2_transform(c_test_df, 'Y1')
+cX_train_p2 <- sclr_fit_transform(pf2_transform(c_train_df, 'Y1'))
+cX_test_p2 <- sclr_fit_transform(pf2_transform(c_test_df, 'Y1'), cX_train_p2)
 
-print(colnames(X_train_sc_pf2))
-print(dim(X_train))
-print(dim(X_train_sc_pf2))
+print("shape original:")
+print(dim(c_train_df))
+print("poly 2:")
+print(dim(cX_train_p2))
+
+# Ridge regression
+c_rdg <- glmnet(as.matrix(cX_train_p2), cy_train$Y1, alpha = 0)
+
+print( paste("Ridge train RMSE:",
+             rmse(as.matrix(cX_train_p2),cy_train,c_rdg)) )
+print( paste("Ridge test   RMSE:",
+             rmse(as.matrix(cX_test_p2),cy_test,c_rdg)) )
+
+# Lasso regression
+
+# Train a linear model
+c_lso <- glmnet(as.matrix(cX_train_p2), cy_train$Y1, alpha = 1)
+  # alpha=0.0001,max_iter=20000,tol=0.005 ?
+
+print( paste("Lasso train RMSE:",
+             rmse(as.matrix(cX_train_p2),cy_train,c_lso)) )
+print( paste("Lasso test  RMSE:",
+             rmse(as.matrix(cX_test_p2),cy_test,c_lso)) )
+
+# MLP regression
+c_mlp <- mlp(as.matrix(cX_train_p2), cy_train$Y1, size = 200, maxit = 5000)
+
+print( paste("MLP train RMSE:", rmse(cX_train_p2, cy_train, c_mlp)) )
+print( paste("MLP test  RMSE:", rmse(cX_test_p2, cy_test, c_mlp)) )
+
+# Decision tree regression
+c_dtr <- rpart(Y1 ~ ., data = c_train_df, control = list(maxdepth=7))
+
+print( paste("DT regression train RMSE:", rmse(X_train_scl, y_train, dtr2)) )
+print( paste("DT regression test  RMSE:", rmse(X_test_scl, y_test, dtr2)) )
 
 ```
 
 ### Examples
 ```{r}
-
 ```
 
 ```{r}
-
-```
+s```
 
 
