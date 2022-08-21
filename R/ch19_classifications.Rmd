@@ -1,0 +1,499 @@
+---
+title: "ch19_classifiations"
+author: "Lawrence Ramsay"
+date: '2022-08-18'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require("pacman")){
+  install.packages("pacman")
+}
+
+pacman::p_load("remotes", "RnavGraphImageData", "magrittr", "nnet", "data.table",
+               "caret", "rpart", "tictoc", "naivebayes", "RSNNS", "mvtnorm", "patchwork")
+
+if(!require("snedata")){
+  remotes::install_github("jlmelville/snedata")
+}
+library(snedata)
+
+oli <- as.data.table(snedata::olivetti_faces())[1:50] # reduced the size of the dataset to decrease training time
+
+y <- oli[, .(Label)] %>%
+  .[, Label := factor(Label)]
+X <- as.data.table(scale(oli[, !c("Label")]))
+
+oli_sc <- cbind(y, X)
+
+set.seed(6)
+index <- caret::createDataPartition(oli_sc$Label,p=0.8,list=FALSE)
+train <- oli_sc[index,]
+test <- oli_sc[-index,]
+
+trControl <- trainControl(method  = "cv", number  = 2)
+
+```
+
+### Comparing Different Classifiers
+
+```{r}
+
+show_olivetti_face(snedata::olivetti_faces(), 1, 2)
+
+```
+
+##### Standard
+
+```{r}
+
+
+
+tictoc::tic(msg = "Logistic Regression 2 fold training time")
+
+log_reg <- caret::train(Label ~ .,
+             method='multinom',
+             trControl  = trControl,
+             tuneGrid   = expand.grid(decay = 0.0001),
+             data = train,
+             metric     = "Accuracy",
+             MaxNWts = 10000000,
+             maxit = 10)
+
+tictoc::toc()
+
+print(paste0("Logistic Regression 2 fold training Accuracy: ", log_reg$results$Accuracy))
+
+log_reg_pred <- predict(log_reg, test)
+tab <- caret::confusionMatrix(data = log_reg_pred, reference = test$Label)
+
+print(paste0("Logistic Regression 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+```{r}
+
+tictoc::tic(msg = "Decision Tree 2 fold training time")
+
+dec_tree <- caret::train(Label ~ .,
+             method='rpart',
+             trControl  = trControl,
+             data = train,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Decision Tree 2 fold training Accuracy: ", mean(dec_tree$results$Accuracy)))
+
+dec_tree_pred <- predict(dec_tree, test)
+tab <- caret::confusionMatrix(data = dec_tree_pred, reference = test$Label)
+
+print(paste0("Decision Tree 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+
+tictoc::tic(msg = "Naive Bayes 2 fold training time")
+
+gaussian_nb <- caret::train(Label ~ .,
+             method='naive_bayes',
+             trControl  = trControl,
+             data = train,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Naive Bayes 2 fold training Accuracy: ", mean(gaussian_nb$results$Accuracy)))
+
+gaussian_nb_pred <- predict(gaussian_nb, test)
+tab <- caret::confusionMatrix(data = gaussian_nb_pred, reference = test$Label)
+
+print(paste0("Naive Bayes 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+
+tictoc::tic(msg = "Multi Layer Perceptron 2 fold training time")
+
+mult_perp <- caret::train(Label ~ .,
+             method='mlp',
+             trControl  = trControl,
+             data = train,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Multi Layer Perceptron 2 fold training Accuracy: ", mean(mult_perp$results$Accuracy)))
+
+mult_perp_pred <- predict(mult_perp, test)
+tab <- caret::confusionMatrix(data = mult_perp_pred, reference = test$Label)
+
+print(paste0("Multi Layer Perceptron 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+##### Tuned Hyper Parameter
+
+### Iris Dataset
+
+```{r}
+
+y <- iris %>% 
+  as.data.table() %>%
+  .[, .(Species)] %>%
+  .[, Species := factor(Species)]
+
+X <- 
+  iris %>%
+  as.data.table() %>%
+  .[, !c("Species")] %>%
+  scale()
+
+iris_sc <- cbind(y, X)
+
+index <- caret::createDataPartition(iris_sc$Species,p=0.5,list=FALSE)
+train_iris <- iris_sc[index,]
+test_iris <- iris_sc[-index,]
+
+
+```
+
+```{r}
+
+
+
+tictoc::tic(msg = "Logistic Regression 2 fold training time")
+
+log_reg <- caret::train(Species ~ .,
+             method='multinom',
+             trControl  = trControl,
+             tuneGrid   = expand.grid(decay = 0.0001),
+             data = train_iris,
+             metric     = "Accuracy",
+             MaxNWts = 10000000,
+             maxit = 10)
+
+tictoc::toc()
+
+print(paste0("Logistic Regression 2 fold training Accuracy: ", log_reg$results$Accuracy))
+
+log_reg_pred <- predict(log_reg, test_iris)
+tab <- caret::confusionMatrix(data = log_reg_pred, reference = test_iris$Species)
+
+print(paste0("Logistic Regression 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+```{r}
+
+tictoc::tic(msg = "Decision Tree 2 fold training time")
+
+dec_tree <- caret::train(Species ~ .,
+             method='rpart',
+             trControl  = trControl,
+             data = train_iris,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Decision Tree 2 fold training Accuracy: ", mean(dec_tree$results$Accuracy)))
+
+dec_tree_pred <- predict(dec_tree, test_iris)
+tab <- caret::confusionMatrix(data = dec_tree_pred, reference = test_iris$Species)
+
+print(paste0("Decision Tree 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+
+tictoc::tic(msg = "Naive Bayes 2 fold training time")
+
+gaussian_nb <- caret::train(Species ~ .,
+             method='naive_bayes',
+             trControl  = trControl,
+             data = train_iris,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Naive Bayes 2 fold training Accuracy: ", mean(gaussian_nb$results$Accuracy)))
+
+gaussian_nb_pred <- predict(gaussian_nb, test_iris)
+tab <- caret::confusionMatrix(data = gaussian_nb_pred, reference = test_iris$Species)
+
+print(paste0("Naive Bayes 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+
+tictoc::tic(msg = "Multi Layer Perceptron 2 fold training time")
+
+mult_perp <- caret::train(Species ~ .,
+             method='mlp',
+             trControl  = trControl,
+             data = train_iris,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Multi Layer Perceptron 2 fold training Accuracy: ",
+             mean(mult_perp$results$Accuracy)))
+
+mult_perp_pred <- predict(mult_perp, test_iris)
+tab <- caret::confusionMatrix(data = mult_perp_pred, reference = test_iris$Species)
+
+print(paste0("Multi Layer Perceptron 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+### Synthetic Data Example 1 (circle)
+
+#### Create Data 
+
+```{r}
+#Create  synthetic data
+x <- rmvnorm(n=400, sigma=matrix(c(1,0,0,1), ncol=2))
+
+#plot(x)
+
+#Adds a class
+circle <- data.table(x) %>%
+  .[, class := factor(ifelse((V1 > -1 & V1 < 1 )&(V2 > -1 & V2 < 1 ), 0, 1))]
+
+#Splits data into test and train
+index <- caret::createDataPartition(circle$class,p=0.5,list=FALSE)
+train_cr <- circle[index,]
+test_cr <- circle[-index,]
+```
+
+
+```{r}
+ggplot(train_cr) +
+  geom_point(aes(V1, V2, color = class))
+
+```
+
+##### Logistic Regression
+
+```{r}
+
+#Train model
+tictoc::tic(msg = "Logistic Regression 2 fold training time")
+
+log_reg <- caret::train(class ~ .,
+             method='multinom',
+             trControl  = trControl,
+             tuneGrid   = expand.grid(decay = 0.0001),
+             data = train_cr,
+             metric     = "Accuracy",
+             MaxNWts = 10000000,
+             maxit = 10)
+
+tictoc::toc()
+
+#Accuracy and prediction
+print(paste0("Logistic Regression 2 fold training Accuracy: ", log_reg$results$Accuracy))
+
+log_reg_pred <- predict(log_reg, test_cr)
+tab <- caret::confusionMatrix(data = log_reg_pred, reference = test_cr$class)
+
+print(paste0("Logistic Regression 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+```{r}
+
+#Plot results 
+ggplot(test_cr) +
+  geom_point(aes(V1, V2, color = log_reg_pred))
+
+```
+
+##### Multi Layer Perceptron
+
+```{r}
+
+tictoc::tic(msg = "Multi Layer Perceptron 2 fold training time")
+
+mult_perp <- caret::train(class ~ .,
+             method='mlp',
+             trControl  = trControl,
+             data = train_cr,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Multi Layer Perceptron 2 fold training Accuracy: ",
+             mean(mult_perp$results$Accuracy)))
+
+mult_perp_pred <- predict(mult_perp, test_cr)
+tab <- caret::confusionMatrix(data = mult_perp_pred, reference = test_cr$class)
+
+print(paste0("Multi Layer Perceptron 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+
+ggplot(test_cr) +
+  geom_point(aes(V1, V2, color = mult_perp_pred))
+
+```
+
+##### Naive Bayes
+
+```{r}
+
+tictoc::tic(msg = "Naive Bayes 2 fold training time")
+
+gaussian_nb <- caret::train(class ~ .,
+             method='naive_bayes',
+             trControl  = trControl,
+             data = train_cr,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Naive Bayes 2 fold training Accuracy: ", mean(gaussian_nb$results$Accuracy)))
+
+gaussian_nb_pred <- predict(gaussian_nb, test_cr)
+tab <- caret::confusionMatrix(data = gaussian_nb_pred, reference = test_cr$class)
+
+print(paste0("Naive Bayes 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+ggplot(test_cr) +
+  geom_point(aes(V1, V2, color = gaussian_nb_pred))
+
+```
+
+
+
+### Synthetic Data Example 2 (side)
+
+```{r}
+
+x2 <- rmvnorm(n=200, sigma=matrix(c(1,0,0,1), ncol=2))
+
+samp <- sample(x= 1:nrow(x2), nrow(x2) * 0.1)
+
+side <- data.table(x2) %>%
+  .[, init := ifelse((V1 > 0), 0, 1)] %>%
+  .[, index := .I] %>%
+  .[, class := init] %>%
+  .[index %in% samp, class := ifelse(init == 1, 0, 1)] %>%
+  .[index %in% samp, class := ifelse(init == 0, 1, 0)] %>%
+  .[, class := factor(class)] %>%
+  .[, index := NULL] %>%
+  .[, init := NULL]
+
+
+#Splits data into test and train
+index <- caret::createDataPartition(side$class,p=0.5,list=FALSE)
+train_sd <- side[index,]
+test_sd <- side[-index,]
+
+ggplot(train_sd) +
+  geom_point(aes(V1, V2, color = class))
+
+```
+##### Logistic Regression
+
+```{r}
+
+#Train model
+tictoc::tic(msg = "Logistic Regression 2 fold training time")
+
+log_reg <- caret::train(class ~ .,
+             method='multinom',
+             trControl  = trControl,
+             tuneGrid   = expand.grid(decay = 0.0001),
+             data = train_sd,
+             metric     = "Accuracy",
+             MaxNWts = 10000000,
+             maxit = 10)
+
+tictoc::toc()
+
+#Accuracy and prediction
+print(paste0("Logistic Regression 2 fold training Accuracy: ", log_reg$results$Accuracy))
+
+log_reg_pred <- predict(log_reg, test_sd)
+tab <- caret::confusionMatrix(data = log_reg_pred, reference = test_sd$class)
+
+print(paste0("Logistic Regression 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+
+```{r}
+
+ggplot(test_sd) +
+  geom_point(aes(V1, V2, color = log_reg_pred))
+
+```
+##### Multi Layer Perceptron
+
+```{r}
+
+tictoc::tic(msg = "Multi Layer Perceptron 2 fold training time")
+
+mult_perp <- caret::train(class ~ .,
+             method='mlp',
+             trControl  = trControl,
+             data = train_sd,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Multi Layer Perceptron 2 fold training Accuracy: ",
+             mean(mult_perp$results$Accuracy)))
+
+mult_perp_pred <- predict(mult_perp, test_sd)
+tab <- caret::confusionMatrix(data = mult_perp_pred, reference = test_sd$class)
+
+print(paste0("Multi Layer Perceptron 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+
+ggplot(test_sd) +
+  geom_point(aes(V1, V2, color = mult_perp_pred))
+
+```
+
+
+##### Naive Bayes
+
+```{r}
+
+tictoc::tic(msg = "Naive Bayes 2 fold training time")
+
+gaussian_nb <- caret::train(class ~ .,
+             method='naive_bayes',
+             trControl  = trControl,
+             data = train_sd,
+             metric     = "Accuracy")
+
+tictoc::toc()
+
+print(paste0("Naive Bayes 2 fold training Accuracy: ", mean(gaussian_nb$results$Accuracy)))
+
+gaussian_nb_pred <- predict(gaussian_nb, test_sd)
+tab <- caret::confusionMatrix(data = gaussian_nb_pred, reference = test_sd$class)
+
+print(paste0("Naive Bayes 2 fold test Accuracy: ", tab$overall["Accuracy"]))
+
+```
+
+```{r}
+ggplot(test_sd) +
+  geom_point(aes(V1, V2, color = gaussian_nb_pred))
+
+```
