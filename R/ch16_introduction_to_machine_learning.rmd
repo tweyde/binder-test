@@ -1,70 +1,119 @@
 ---
 title: "Chapter 16"
-author: "Stefan Diener"
-date: "2022-07-27"
+author: "Lawrence Ramsay"
+date: '2022-08-11'
 output: html_document
 ---
-### Example: Fitting a Decision Tree for Classification
-```{r}
-library(datasets)
-data(iris)
-print(unique(iris$Species))
-print(names(iris[,1:4]))
-print(nrow(iris))
-print(iris[1,])
-```
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
 
-```{r}
-library(caret)
-set.seed(538)                              
-index <- createDataPartition(iris$Species,p=0.5,list=FALSE)
-train <- iris[index,]
-test <- iris[-index,]
-```
-
-
-```{r}
-suppressMessages(library(rattle))
-library(rpart)
-clf_full <- rpart(Species~., data=train, control=rpart.control(minsplit=2, minbucket = 1, cp=-1))
-fancyRpartPlot(clf_full)
-
-```
-```{r}
-print(train[1,])
-predict(clf_full, newdata = test[1,])
-```
-```{r}
-total <- nrow(train)
-correct <- 0
-for(i in 1:total){
-  if(train$Species[i] == predict(clf_full, newdata = train[i,], type="class")){
-    correct = correct + 1
-  }
+if(!require("dplyr")){
+  install.packages("dplyr", repos = "http://cran.us.r-project.org")
 }
-accuracy <- correct / total
+
+library(dplyr)
+
+if(!require("magrittr")){
+  install.packages("magrittr", repos = "http://cran.us.r-project.org")
+}
+library(magrittr)
+
+if(!require("mltools")){
+  install.packages("mltools", repos = "http://cran.us.r-project.org")
+}
+
+if(!require("data.table")){
+  install.packages("data.table", repos = "http://cran.us.r-project.org")
+}
+
+if(!require("tree")){
+  install.packages("tree", repos = "http://cran.us.r-project.org")
+}
+library(tree)
+
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+print("Target Names")
+print(unique(iris$Species))
+
+print("Features Names")
+print(names(iris[, 1:4]))
+
+print("No of samples")
+print(nrow(iris))
+
+# print("First row")
+# print(iris[[1,]])
+
+```
+
+
+```{r}
+
+i <- mltools::one_hot(as.data.table(iris))
+i2 <- unclass(iris)
+i3 <- 
+  iris %>%
+  mutate(target = as.factor(Species))
+
+```
+
+
+```{r}
+set.seed(1)
+sample <- sample(c(TRUE, FALSE), nrow(iris), replace=TRUE, prob=c(0.5,0.5))
+train  <- iris[sample, ]
+test   <- iris[!sample, ]
+
+X_train <- train[1:4]
+y_train <- train[5]
+
+X_test <- train[1:4]
+y_test <- train[5]
+
+set.seed(101)
+train=sample(1:nrow(iris), 75)
+
+```
+
+```{r}
+
+tree <- rpart::rpart(Species~., data=iris, subset=train)
+rpart.plot::rpart.plot(tree)
+
+```
+```{r}
+tree
+```
+
+```{r}
+
+
+tree_pred = predict(tree, test, type="class")
+
+misclass_table <- with(test, table(tree_pred, Species))
+misclass_table
+```
+
+
+```{r}
+
+correct <- 
+misclass_table %>%
+  data.table() %>%
+  filter(tree_pred == Species) %>%
+  .$N %>%
+  sum
+
+accuracy <- correct / nrow(test)
 accuracy
 ```
 
-
-
-### Generalization, overfitting and regularization
-
-
-```{r}
-sum(predict(clf_full, newdata = test, type="class") == test$Species)/nrow(test)
-```
-
-
-```{r}
-clf_small <- rpart(Species~., data=train, control=rpart.control(maxdepth=2))
-fancyRpartPlot(clf_small)
-```
-
-
-```{r}
-train_acc <- sum(predict(clf_small, newdata = train, type="class") == test$Species)/nrow(train)
-test_acc <- sum(predict(clf_small, newdata = test, type="class") == test$Species)/nrow(test)
-print(cat("Training accuracy: ", train_acc, "Test accuracy: ", test_acc))
-```

@@ -39,7 +39,6 @@ print(nrow(wine))
 ```{r}
 
 tree <- rpart::rpart(Type~., data=wine, subset=index, cp = 0.01)
-#rpart.plot::rpart.plot(tree)
 
 tree_pred = predict(tree, test, type="class")
 
@@ -104,7 +103,6 @@ print(paste0("KNN 10 fold stratified Accuracy Standard Deviation: ", fit_knn_str
 ### Significance of Model Differences
 
 ```{r}
-
 trControl <- trainControl(method  = "cv",
                           number  = 20)
 
@@ -130,8 +128,8 @@ fit_knn_loocv <- train(Type ~ .,
              metric     = "Accuracy",
              data       = wine)
 
-print(paste0("KNN LOOCV Mean Accuracy: ", fit_knn_20fold$results$Accuracy))
-print(paste0("KNN LOOCV Accuracy Standard Deviation: ", fit_knn_20fold$results$AccuracySD))
+print(paste0("KNN LOOCV Mean Accuracy: ", fit_knn_loocv$results$Accuracy))
+print(paste0("KNN LOOCV Accuracy Standard Deviation: ",  sd(fit_knn_loocv$results)))
 ```
 
 ```{r}
@@ -159,7 +157,7 @@ print(paste0("KNN Accuracy Standard Deviation: ", fit_knn_20fold$results$Accurac
 print(paste0("Decision Tree Mean Accuracy: ", fit_dt_20fold$results$Accuracy))
 print(paste0("Decision Tree Accuracy Standard Deviation: ", fit_dt_20fold$results$AccuracySD))
 
-wilcox.test(fit_dt_20fold$resample$Accuracy, fit_knn_20fold$resample$Accuracy, alternative = "two.sided")
+wilcox.test(fit_dt_20fold$resample$Accuracy, fit_knn_20fold$resample$Accuracy, paired=TRUE, exact = FALSE, alternative = "two.sided")
 
 ```
 
@@ -184,4 +182,38 @@ ggplot() +
   scale_x_continuous(breaks=c(1:20))
 
 ```
+
+```{r}
+folds <- 20
+cvIndex <- createFolds(factor(wine$Type), folds, returnTrain = T)
+
+trControl <- trainControl(index = cvIndex,
+               method = 'cv', 
+               number = folds)
+
+fit_dt_strat_20fold <- train(Type ~ .,
+             method     = "rpart",
+             trControl  = trControl,
+             tuneGrid = expand.grid(cp = 0.01),
+             metric     = "Accuracy",
+             data       = wine)
+
+print(paste0("Decision Tree Mean Accuracy: ", fit_dt_strat_20fold$results$Accuracy))
+print(paste0("Decision Tree Accuracy Standard Deviation: ", fit_dt_strat_20fold$results$AccuracySD))
+
+fit_knn_strat_20fold <- train(Type ~ .,
+             method     = "knn",
+             tuneGrid   = expand.grid(k = 1),
+             trControl  = trControl,
+             metric     = "Accuracy",
+             data       = wine)
+
+print(paste0("KNN 20 fold stratified Mean Accuracy: ", fit_knn_strat_20fold$results$Accuracy))
+print(paste0("KNN 20 fold stratified Accuracy Standard Deviation: ", fit_knn_strat_20fold$results$AccuracySD))
+
+wilcox.test(fit_dt_strat_20fold$resample$Accuracy, 
+paired=TRUE, exact = FALSE, fit_knn_strat_20fold$resample$Accuracy, alternative = "two.sided")
+
+```
+
 
