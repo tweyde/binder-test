@@ -32,7 +32,7 @@ library(rattle)
 # Get the data and pre-process
 ## Read data
 ```{r}
-dataset <- read.csv('diabetes.csv', header = TRUE)
+dataset <- read.csv('../../data/diabetes.csv', header = TRUE)
 dim(dataset)
 ```
 ## Partition Data
