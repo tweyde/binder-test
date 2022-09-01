@@ -1,0 +1,115 @@
+---
+title: "Chapter 15"
+author: "Stefan Diener"
+date: "2022-07-27"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require("xts")){
+  install.packages("xts")
+}
+
+if(!require("forecast")){
+  install.packages("forecast")
+}
+
+```
+
+```{r}
+library(xts)
+df_raw <- read.csv(file = '../data/TOTALNSA.csv')
+df_raw[['DATE']] <- as.Date(df_raw[['DATE']], format='%Y-%m-%d')
+df <- ts(df_raw$TOTALNSA, start = '1976', freq=12)
+plot(decompose(df))
+```
+
+Plot raw data (black) and smoothed data (red) using a moving-average smoother to strip seasonality.
+```{r}
+library(forecast)
+autoplot(df) +
+autolayer(ma(df, order = 12), colour = TRUE) 
+
+```
+
+### Simple forecasting--extrapolation
+```{r}
+# Create new time series dataframe with moving average
+df_ma <- ma(df, order = 12)
+
+# Interpolate missing values
+df_ma <- ts(na.exclude(df_ma))
+
+
+# Forecast
+myforecast <- forecast(df_ma, level = c(0), h=36)
+autoplot(myforecast)
+```
+
+###  Time dependence (Autocorrelation), a forecasters best friend
+```{r}
+acf_obs <- acf(df_ma, lag.max = length(df_ma), plot = FALSE)
+
+plot(acf_obs, type = "l")
+```
+
+```{r}
+# Autoregressive model
+res <- arima(df_ma, c(1,0,0), method = "CSS-ML") # Produces an ARIMA[1,0,0]
+
+summary(res)
+```
+
+
+```{r}
+
+(auto_reg <- stats::ar(df_ma, order.max = 12))
+
+auto_reg$aic
+
+```
+
+```{r}
+# Forecast the model from task 10 one hundred and twenty days ahead
+model <- arima(df_ma, c(2,0,0), method = "CSS-ML") # Produces an ARIMA[2,0,0]
+
+autoplot(df_ma) +
+  autolayer(predict(auto_reg, n.ahead = 120)$pred)
+
+```
+
+### Forecasting Change: When the Trend is not your friend
+```{r}
+# Detrending
+set1 <- ts(df[1:length(df)-1], start = c('1976', '01'), frequency = 12)
+set2 <- ts(df[2:length(df)], start = c('1976', '02'), frequency = 12)
+
+# Detrend by subtraction
+df_detrended <- set1 - set2
+
+# Detrend by division
+df_detrended2 <- set1 / set2
+```
+
+### Forecasting Change: Combining AR and MA (ARIMA)
+```{r}
+# Fit AR model using optimal lags
+mod <- arima(df_ma, order = c(1,1,1)) # Produces an ARIMA[1, 1, 1] (mimicking the Python code)
+
+print(mod)
+```
+
+```{r}
+# Auto ARIMA, solves p,d,q based on a maximization of AIC
+auto_arima_mod <- auto.arima(df_ma)
+print(auto_arima_mod)
+
+
+autoplot(forecast(auto_arima_mod, h = 120, level = c(0)))
+```
+
+
+
