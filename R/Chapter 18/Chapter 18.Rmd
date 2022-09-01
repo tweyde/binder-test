@@ -1,0 +1,562 @@
+---
+title: 'Chapter 18: Regression Models in Machine Learning'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: '2022'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 100, digits = 4) #set to four decimal 
+```
+
+# Load packages
+```{r}
+library(caret)
+library(rattle)
+```
+
+# Get the data and pre-process
+## Read data
+```{r}
+dataset <- read.csv('diabetes.csv', header = TRUE)
+dim(dataset)
+```
+## Partition Data
+
+```{r}
+set.seed(123456)
+N = nrow(dataset)
+cut1 = floor(0.6*N)
+cut2 = floor(0.8*N)
+index = sample(1:N)
+train_index = index[1:cut1]
+val_index = index[(cut1+1):cut2]
+test_index = index[(cut2+1):N]
+df_train = dataset[train_index,]
+df_val = dataset[val_index,]
+df_test = dataset[test_index,]
+sapply(list(df_train,df_val,df_test),nrow)
+```
+# Regression Model and predict
+```{r}
+df_train[-11] = scale(df_train[-11])
+lr = caret::train(target ~ ., method='lm',data = df_train)
+train_pred = predict(lr,newdata = df_train)
+val_pred = predict(lr,newdata = scale(df_val[-11]))
+test_pred = predict(lr,newdata = scale(df_test[-11]))
+```
+
+# Compute functions for Residual Mean,MSE, RMSE and R_2
+```{r}
+rm <- function(actual,pred) {
+  return(mean(abs(actual-pred)))
+}
+mse <- function(actual,pred) { 
+  return(mean((pred-actual)^2)) 
+} 
+rmse <- function(actual,pred) { 
+  return(mse(pred,actual)^0.5) 
+} 
+R_2 <- function(actual,pred){
+  mean_v = rep(mean(actual),length(actual))
+  SST = sum((actual-mean_v)^2)
+  SSE = sum((actual-pred)^2)
+  return(1-(SSE/SST)) 
+}
+```
+
+
+
+```{r }
+res = data.frame()
+w = rm(df_train$target,train_pred)
+x = mse(df_train$target,train_pred)
+y = rmse(df_train$target,train_pred)
+z = R_2(df_train$target,train_pred)
+res = rbind(res,c("Train",w,x,y,z))
+w = rm(df_val$target,val_pred)
+x = mse(df_val$target,val_pred)
+y = rmse(df_val$target,val_pred)
+z = R_2(df_val$target,val_pred)
+res = rbind(res,c("Validation",w,x,y,z))
+w = rm(df_test$target,test_pred)
+x = mse(df_test$target,test_pred)
+y = rmse(df_test$target,test_pred)
+z = R_2(df_test$target,test_pred)
+res = rbind(res,c("Test",w,x,y,z))
+colnames(res) = c("Data","Residual Mean","MSE","RMSE","R_2")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)
+```
+
+# Polynomial
+* Column names
+```{r}
+colnames(df_train)
+```
+
+
+
+* Write formula for intercept, raw features, squared features,and interactions 
+```{r}
+# Degree 2 polynomial feature generation function 
+
+pf2_transform <- function(df, target_name='target') { 
+  formula_pf2 <- as.formula(paste(target_name, '~ .^2 +', 
+                                  paste('poly(', 
+                                        colnames(df)[-c(1)], 
+                                       ',2, raw=TRUE)[, 2]', 
+                                        collapse = ' + ') 
+                                  ) 
+                            ) 
+   output <- model.matrix(formula_pf2, data = df) 
+  # Rewrite column names for readability 
+   colnames_pf2 <- c("1", 
+                    colnames(df)[-1],              # exclude target 
+                    paste0(colnames(df)[-1],"^2"), # include squares 
+                    colnames(output)[-(1:(length(df)*2-1))]) # include interactions 
+    colnames(output) <- colnames_pf2 
+  # Convert to dataframe 
+  output_df <- data.frame(output) 
+  # Exclude intercept column 
+  output_df[,1] <- NULL 
+  return(output_df) 
+} 
+```
+
+## Create data sets with polynomials for training, validation and test sets.
+* Create the training data set
+```{r}
+train_sc_pf2 <- pf2_transform(df_train,target_name = "target")
+train_sc_pf2$target= df_train$target
+train_sc_pf2 = train_sc_pf2[-20]
+print(colnames(train_sc_pf2))
+dim(df_train[-10])
+dim(train_sc_pf2)
+```
+
+* Prepare the validation and test sets
+```{r}
+df_val[-11]= scale(df_val[-11])
+val_sc_pf2 <- pf2_transform(df_val,target_name = "target")
+val_sc_pf2$target = df_val$target
+val_sc_pf2 = val_sc_pf2[-20]
+
+
+df_test[-11]= scale(df_test[-11])
+test_sc_pf2 <- pf2_transform(df_test,target_name = "target")
+test_sc_pf2$target = df_test$target
+test_sc_pf2 = test_sc_pf2[-20]
+
+```
+* run the regression models
+
+```{r warning=FALSE}
+lr = caret::train(target ~ ., method='lm',data = train_sc_pf2)
+train_pred = predict(lr,newdata = train_sc_pf2)
+val_pred = predict(lr,newdata = val_sc_pf2)
+test_pred = predict(lr,newdata = test_sc_pf2)
+
+
+```
+* Evaluate the results
+
+```{r}
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)
+```
+
+# Parameter Shrinkage with Ridge Regression 
+
+```{r}
+ridge <- caret::train(y = train_sc_pf2$target,x = train_sc_pf2[-10],
+                 method = 'glmnet', 
+                 tuneGrid = expand.grid(alpha = 0, lambda = 1)
+               ) 
+train_pred = predict(ridge,newdata = train_sc_pf2)
+val_pred = predict(ridge,newdata = val_sc_pf2)
+test_pred = predict(ridge,newdata = test_sc_pf2)
+
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)
+```
+
+* Best lambda
+
+hyper-parameter tuning
+```{r warning=FALSE}
+parameters <- c(seq(0.1, 2, by =0.1) ,  seq(2, 5, 0.5) , seq(5, 25, 1))
+
+ridge<-caret::train(y = train_sc_pf2$target,
+                 x = train_sc_pf2[-10],
+                 method = 'glmnet', 
+                 tuneGrid = expand.grid(alpha = 0, lambda = parameters) ,
+                 metric =  "Rsquared"
+               ) 
+
+lasso<-caret::train(y = train_sc_pf2$target,
+                 x = train_sc_pf2[-10],
+                 method = 'glmnet', 
+                 tuneGrid = expand.grid(alpha = 1, lambda = parameters) ,
+                 metric =  "Rsquared"
+               ) 
+paste(" Ridge Best lambda = ",ridge$finalModel$lambdaOpt)
+paste(" Lasso Best lambda = ",lasso$finalModel$lambdaOpt)
+
+
+```
+# Run best ridge regression
+
+```{r warning=FALSE}
+ridge_best<-caret::train(y = train_sc_pf2$target,
+      x = train_sc_pf2[-10],
+      method = 'glmnet', 
+      tuneGrid = expand.grid(alpha = 0, lambda = ridge$finalModel$lambdaOpt))
+train_pred = predict(ridge_best,newdata = train_sc_pf2)
+val_pred = predict(ridge_best,newdata = val_sc_pf2)
+test_pred = predict(ridge_best,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)            
+```
+
+```{r}
+res = data.frame()
+y = R2(train_pred,df_train$target)
+res = rbind(res,c("Train",y))
+y = R2(val_pred,df_val$target)
+res = rbind(res,c("Validation",y))
+y = R2(test_pred,df_test$target)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","R_2")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res) 
+```
+
+# Lasso Regression
+```{r}
+lasso<-caret::train(y = train_sc_pf2$target,
+      x = train_sc_pf2[-10],
+      method = 'glmnet', 
+      tuneGrid = expand.grid(alpha = 1, lambda = 0))
+train_pred = predict(lasso,newdata = train_sc_pf2)
+val_pred = predict(lasso,newdata = val_sc_pf2)
+test_pred = predict(lasso,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res) 
+```
+
+
+
+
+# Run best Lasso regression
+* Find the best hyper parameter lambda
+```{r}
+parameters <- c(seq(0.1, 2, by =0.1) ,  seq(2, 5, 0.5) , seq(5, 25, 1))
+lasso<-caret::train(y = train_sc_pf2$target,
+                 x = train_sc_pf2[-10],
+                 method = 'glmnet', 
+                 tuneGrid = expand.grid(alpha = 1, lambda = parameters) ,
+                 metric =  "Rsquared"
+               ) 
+paste(" Lasso Best lambda = ",lasso$finalModel$lambdaOpt)
+```
+
+* Run the lasso model with the tuned lambda parameter
+```{r}
+lasso_best<-caret::train(y = train_sc_pf2$target,
+      x = train_sc_pf2[-10],
+      method = 'glmnet', 
+      tuneGrid = expand.grid(alpha = 1, lambda = lasso$finalModel$lambdaOpt))
+train_pred = predict(lasso_best,newdata = train_sc_pf2)
+val_pred = predict(lasso_best,newdata = val_sc_pf2)
+test_pred = predict(lasso_best,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)         
+```
+
+* R2 with best lasso
+
+```{r}
+res = data.frame()
+y = R2(train_pred,df_train$target)
+res = rbind(res,c("Train",y))
+y = R2(val_pred,df_val$target)
+res = rbind(res,c("Validation",y))
+y = R2(test_pred,df_test$target)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","R_2")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res) 
+
+```
+
+
+## Lasso non zero coefficients
+```{r }
+df = data.frame(
+  lasso = as.data.frame.matrix(coef(lasso$finalModel, lasso$finalModel$lambdaOpt))
+)
+df =subset(df, s1>0.1)
+df$var = row.names(df)
+knitr::kable(df[order(-df$s1),c(2,1)][2])
+```
+
+# Neural Network
+
+* Large network
+```{r warning=FALSE}
+mlp <- caret::train(target ~ .,data = train_sc_pf2,method='mlp',size=1000)
+             
+train_pred = predict(mlp,newdata = train_sc_pf2)
+val_pred = predict(mlp,newdata = val_sc_pf2)
+test_pred = predict(mlp,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)                    
+
+```
+* Smaller network
+```{r}
+mlp <- caret::train(target ~ .,data = train_sc_pf2,method='mlp',size=50)
+             
+train_pred = predict(mlp,newdata = train_sc_pf2)
+val_pred = predict(mlp,newdata = val_sc_pf2)
+test_pred = predict(mlp,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)      
+```
+## Regression Trees
+
+```{r warning=FALSE}
+dtr <- caret::train(target ~ .,data = train_sc_pf2,method='rpart')
+             
+train_pred = predict(dtr,newdata = train_sc_pf2)
+val_pred = predict(dtr,newdata = val_sc_pf2)
+test_pred = predict(dtr,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)   
+```
+* with a maximum depth of 2
+```{r}
+dtr <- caret::train(target ~ .,data = train_sc_pf2,method='rpart',
+                    control = list(max_depth=2))
+             
+train_pred = predict(dtr,newdata = train_sc_pf2)
+val_pred = predict(dtr,newdata = val_sc_pf2)
+test_pred = predict(dtr,newdata = test_sc_pf2)
+res = data.frame()
+y = rmse(df_train$target,train_pred)
+res = rbind(res,c("Train",y))
+y = rmse(df_val$target,val_pred)
+res = rbind(res,c("Validation",y))
+y = rmse(df_test$target,test_pred)
+res = rbind(res,c("Test",y))
+colnames(res) = c("Data","RMSE")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)   
+```
+
+# Harder problem
+
+* Read data
+
+```{r}
+df <- read.csv("ENB2012_data.csv")
+```
+
+* Data preparation
+```{r}
+dataset = df[-c(11,12)]
+N = nrow(dataset)
+cut1 = floor(0.6*N)
+cut2 = floor(0.8*N)
+index = sample(1:N)
+train_index = index[1:cut1]
+val_index = index[(cut1+1):cut2]
+test_index = index[(cut2+1):N]
+df_train = dataset[train_index,]
+df_val = dataset[val_index,]
+df_test = dataset[test_index,]
+sapply(list(df_train,df_val,df_test),nrow)
+df_train[-10] = scale(df_train[-10])
+```
+* Build models
+```{r warning=FALSE}
+res = data.frame()
+# Linear Regression
+lr = caret::train(Y2 ~ ., method='lm',data = df_train)
+train_pred = predict(lr,newdata = df_train)
+val_pred = predict(lr,newdata = scale(df_val[-10]))
+test_pred = predict(lr,newdata = scale(df_test[-10]))
+y1 = rmse(df_train$Y2,train_pred)
+y2 = rmse(df_val$Y2,val_pred)
+y3 = rmse(df_test$Y2,test_pred)
+res = rbind(res,c("Linear Regression",y1,y2,y3))
+# Ridge Regression
+ridge <- caret::train(y = df_train$Y2,x = df_train[-10],
+                 method = 'glmnet', 
+                 tuneGrid = expand.grid(alpha = 0, lambda = 1)
+               ) 
+train_pred = predict(ridge,newdata = df_train)
+val_pred = predict(ridge,newdata = scale(df_val[-10]))
+test_pred = predict(ridge,newdata = scale(df_test[-10]))
+y1 = rmse(df_train$Y2,train_pred)
+y2 = rmse(df_val$Y2,val_pred)
+y3 = rmse(df_test$Y2,test_pred)
+res = rbind(res,c("Ridge Regression",y1,y2,y3))
+# Lasso Regression
+lasso <- caret::train(y = df_train$Y2,x = df_train[-10],
+                 method = 'glmnet', 
+                 tuneGrid = expand.grid(alpha = 1, lambda = 0)
+               ) 
+train_pred = predict(lasso,newdata = df_train)
+val_pred = predict(lasso,newdata = scale(df_val[-10]))
+test_pred = predict(lasso,newdata = scale(df_test[-10]))
+y1 = rmse(df_train$Y2,train_pred)
+y2 = rmse(df_val$Y2,val_pred)
+y3 = rmse(df_test$Y2,test_pred)
+res = rbind(res,c("Lasso Regression",y1,y2,y3))
+# Neural Net
+nn <- caret::train(y = df_train$Y2,x = df_train[-10],
+                 method = 'mlp') 
+train_pred = predict(nn,newdata = df_train)
+val_pred = predict(nn,newdata = scale(df_val[-10]))
+test_pred = predict(nn,newdata = scale(df_test[-10]))
+y1 = rmse(df_train$Y2,train_pred)
+y2 = rmse(df_val$Y2,val_pred)
+y3 = rmse(df_test$Y2,test_pred)
+res = rbind(res,c("Neural Net",y1,y2,y3))
+# Regression Tree
+dt <- caret::train(y = df_train$Y2,x = df_train[-10],
+                 method = 'rpart') 
+train_pred = predict(dt,newdata = df_train)
+val_pred = predict(dt,newdata = scale(df_val[-10]))
+test_pred = predict(dt,newdata = scale(df_test[-10]))
+y1 = rmse(df_train$Y2,train_pred)
+y2 = rmse(df_val$Y2,val_pred)
+y3 = rmse(df_test$Y2,test_pred)
+res = rbind(res,c("Regression Tree",y1,y2,y3))
+
+colnames(res) = c("Model","Train","Validation","Test")
+# Following converts appropriate columns to numeric type
+res[-1] = lapply(res[-1], FUN = function(y){as.numeric(y)})
+# Following rounds numeric values to 4 digits
+res[,sapply(res, is.numeric)] <-round(res[,sapply(res, is.numeric)],4)
+knitr::kable(res)    
+```
+
+
+

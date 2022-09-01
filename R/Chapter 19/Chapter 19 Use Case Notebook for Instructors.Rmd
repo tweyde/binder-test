@@ -1,0 +1,291 @@
+---
+title: 'Chapter 19: Use Case'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: '2022'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## USe Case: Credit Risk - Identifying Bad Credits
+
+The dataset used for the use case is from <https://datahub.io/machine-learning/credit-g> and is based on Dua, D. and Graff, C. (2019). UCI Machine Learning Repository [<http://archive.ics.uci.edu/ml>]. Irvine, CA: University of California, School of Information and Computer Science.
+
+## Loading libraries
+```{r}
+library(caret)
+library(rattle)
+if(!require("pacman")){
+  install.packages("pacman")
+}
+pacman::p_load("remotes", "RnavGraphImageData", "magrittr", "nnet", "data.table",
+               "caret", "rpart", "tictoc", "naivebayes", "RSNNS", "mvtnorm", "patchwork")
+```
+
+## Read the data file
+* Useful to note that reading categorical data as factors makes data wrangling much simpler in R. While you may want to illustrate one-hot encoding for factor variables, it is not necessary to do so for the models in this use case.
+
+```{r}
+df <- read.csv("credit-g.csv", stringsAsFactors=TRUE)
+```
+
+## Build models
+* Looping through 5 different prediction algorithms
+```{r warning=FALSE}
+index <- caret::createDataPartition(df$class,p=0.5,list=FALSE) 
+train_df <- df[index,] 
+test_df <- df[-index,] 
+trControl <- trainControl(method  = "cv", number  = 2)
+results_df = data.frame()
+
+for (mdl in c("rpart","naive_bayes","glm","rf","mlp"))
+{
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_df, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,train_df)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_df$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+    results_df = rbind(results_df,c(mdl,"Train",train_accuracy))
+    results_df = rbind(results_df,c(mdl,"Test",test_accuracy))
+    
+}
+colnames(results_df) = c("Model","Data","Accuracy")
+results_df$Accuracy = as.numeric(results_df$Accuracy)
+
+ggplot(results_df,aes(Model,Accuracy,fill=Data)) + 
+  geom_col(position = "dodge")+ coord_flip()
+
+```
+
+* Useful to point out the functions to compute sensitivity, specificity,and F1 scores.
+```{r warning=FALSE}
+    
+      mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_df, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,train_df)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_df$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,train_df$class))
+paste("Specificity = ",specificity(mdl_pred_train,train_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,train_df$class)) 
+caret::confusionMatrix(mdl_pred_train,train_df$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+ 
+```
+
+## Data Imbalance
+
+```{r}
+table(train_df$class)
+pie(table(train_df$class))
+```
+
+### Upsample
+* You may to discuss the logic that determines the size of the up-sampled training data. It should be emphasized that only the training data is altered, but not the test data.
+```{r}
+prop.table(table(train_df$class))
+trainup<-upSample(x=train_df[,-ncol(train_df)],
+                  y=train_df$class)
+colnames(trainup) = c(colnames(trainup[-21]),"class")
+prop.table(table(trainup$class))
+nrow(train_df)
+nrow(trainup)
+```
+* Logistic regression - useful to compare the results with the original results.
+```{r warning=FALSE}
+  mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = trainup, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,trainup)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,trainup$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,trainup$class))
+paste("Specificity = ",specificity(mdl_pred_train,trainup$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,trainup$class)) 
+caret::confusionMatrix(mdl_pred_train,trainup$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+```
+
+### SMOTE
+* It may be useful to discuss the key difference with up-sampling and down-sampling. SMOTE employs KNN and interpolation to create synthetic data. Other, more advanced approaches have been developed. Time permitting, some of these can be discussed.
+```{r warning=FALSE}
+library(UBL)
+set.seed(111)
+trainsmote = UBL::SmoteClassif(class~.,train_df, dist="HEOM")
+table(trainsmote$class)
+ mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = trainsmote, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,trainsmote)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,trainsmote$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,trainsmote$class))
+paste("Specificity = ",specificity(mdl_pred_train,trainsmote$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,trainsmote$class)) 
+caret::confusionMatrix(mdl_pred_train,trainsmote$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+
+```
+* Useful to compare and contrast the results with the previous approaches.
+
+* The following provides a good graphical illustration of the original and SMOTE data points for numeric data. You can ask students to think about how to compare factor/categorical data similarities.
+
+```{r warning=FALSE, message=FALSE}
+library(scatterplot3d)
+x = train_df[,c(2,5,13)]
+x$type = "Real Datapoints"
+x1 = trainsmote[,c(2,5,13)]
+x1$type = "SMOTE Datapoints"
+y = rbind(x,x1)
+y$type = factor(y$type)
+
+attach(y)
+colors <- c("#E69F00", "#56B4E9")
+colors <- colors[as.numeric(type)]
+scatterplot3d(x = duration, y = credit_amount, z = age, color = colors,pch=16,
+              grid=TRUE, box=FALSE)
+legend("right", legend = levels(type),
+      col =  c("#E69F00", "#56B4E9"), pch = 16)
+detach(y)
+```
+
+### Down-sampling
+
+* Results in smaller training data.
+```{r}
+prop.table(table(train_df$class))
+traindown<-downSample(x=train_df[,-ncol(train_df)],
+                  y=train_df$class)
+colnames(traindown) = c(colnames(traindown[-21]),"class")
+prop.table(table(traindown$class))
+```
+
+```{r warning=FALSE}
+  mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = traindown, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,traindown)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,traindown$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,traindown$class))
+paste("Specificity = ",specificity(mdl_pred_train,traindown$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,traindown$class)) 
+caret::confusionMatrix(mdl_pred_train,traindown$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+```
+
+## Final Model with SMOTE
+* Useful to compare the SMOTE results with the original, unbalanced training data.
+
+```{r warning=FALSE}
+train_df = trainsmote
+trControl <- trainControl(method  = "cv", number  = 2)
+results_df = data.frame()
+
+for (mdl in c("rpart","naive_bayes","glm","rf","mlp"))
+{
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_df, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,train_df)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_df$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+    results_df = rbind(results_df,c(mdl,"Train",train_accuracy))
+    results_df = rbind(results_df,c(mdl,"Test",test_accuracy))
+    
+}
+colnames(results_df) = c("Model","Data","Accuracy")
+results_df$Accuracy = as.numeric(results_df$Accuracy)
+
+ggplot(results_df,aes(Model,Accuracy,fill=Data)) + 
+  geom_col(position = "dodge")+ coord_flip()
+```
+

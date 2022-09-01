@@ -1,0 +1,593 @@
+---
+title: 'Chapter 19: Classification Models and Evaluation'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "2022"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+```{r}
+library(caret)
+library(rattle)
+```
+
+```{r}
+if(!require("pacman")){
+  install.packages("pacman")
+}
+pacman::p_load("remotes", "RnavGraphImageData", "magrittr", "nnet", "data.table",
+               "caret", "rpart", "tictoc", "naivebayes", "RSNNS", "mvtnorm", "patchwork")
+```
+
+## Get the data
+
+```{r}
+if(!require("snedata")){
+  remotes::install_github("jlmelville/snedata")
+}
+library(snedata)
+library(RnavGraphImageData)
+```
+
+```{r}
+oli <- as.data.frame(snedata::olivetti_faces())[1:50] 
+```
+
+```{r}
+oli <- as.data.table(snedata::olivetti_faces())[1:50]
+y <- oli[, .(Label)] %>%
+  .[, Label := factor(Label)]
+X <- as.data.table(scale(oli[, !c("Label")]))
+y <- oli[, .(Label)] %>%
+  .[, Label := factor(Label)]
+X <- as.data.table(scale(oli[, !c("Label")]))
+oli_sc <- cbind(y, X)
+```
+
+```{r}
+write.csv(oli_sc,"oli_sc.csv")
+```
+
+```{r}
+show_olivetti_face(snedata::olivetti_faces(), 1, 3)
+```
+
+## Create Partition
+
+```{r}
+set.seed(123456)
+index <- createDataPartition(oli_sc$Label,p=0.8,list=FALSE)
+train <- oli_sc[index,]
+test <- oli_sc[-index,]
+trControl <- trainControl(method  = "cv", number  = 2)
+```
+
+## Run Models
+
+### Multinomial Regression
+
+```{r}
+tictoc::tic(msg = "Multinomial Regression 2 fold training time")
+log_reg = caret::train(Label ~ .,   method='multinom',
+             trControl  = trControl,
+             data = train,
+             metric = "Accuracy",
+              MaxNWts = 10000000,
+             maxit = 10)
+tictoc::toc()
+```
+
+```{r}
+log_reg_pred_train = predict(log_reg, train)
+log_reg_pred_test = predict(log_reg, test)
+train_accuracy = caret::confusionMatrix(mdl_pred_train,train$Label)$overall[1]
+test_accuracy = caret::confusionMatrix(mdl_pred_test,test$Label)$overall[1]
+print(paste("Multinomial Regression Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+print(caret::confusionMatrix(log_reg_pred,test$Label))
+```
+
+### Decision Tree, Naive Bayes, Multi Layer Perceptron algorithms
+
+```{r}
+for (mdl in c("rpart","naive_bayes","mlp"))
+{
+     mdl_model <- caret::train(Label ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test)
+     mdl_pred_train= predict(mdl_model,train)
+    train_accuracy = caret::confusionMatrix(mdl_pred_train,train$Label)$overall[1]
+    test_accuracy = caret::confusionMatrix(mdl_pred_test,test$Label)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+    print(caret::confusionMatrix(mdl_pred_test,test$Label))
+}
+```
+
+## Scaling
+
+```{r}
+train1 = as.data.frame(scale(train[,-1]))
+test1 = as.data.frame(scale(test[,-1]))
+train1$Label = train$Label
+test1$Label = test$Label
+
+trControl <- trainControl(method  = "cv", number  = 2)
+for (mdl in c("naive_bayes","mlp"))
+{
+     mdl_model <- caret::train(Label ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train1, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test1)
+     mdl_pred_train= predict(mdl_model,train1)
+    train_accuracy = caret::confusionMatrix(mdl_pred_train,train1$Label)$overall[1]
+    test_accuracy = caret::confusionMatrix(mdl_pred_test,test1$Label)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+}
+
+
+
+```
+
+## Iris Dataset
+
+```{r}
+
+index <- caret::createDataPartition(iris$Species,p=0.5,list=FALSE) 
+train_iris <- iris[index,] 
+test_iris <- iris[-index,] 
+trControl <- trainControl(method  = "cv", number  = 2)
+for (mdl in c("multinom","rpart","naive_bayes","mlp"))
+{
+     mdl_model <- caret::train(Species ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_iris, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_iris)
+     mdl_pred_train= predict(mdl_model,train_iris)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_iris$Species)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_iris$Species)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+}
+
+```
+
+## Synthetic Data 1
+
+```{r}
+x <- as.data.frame(rmvnorm(n=400, sigma=matrix(c(1,0,0,1), ncol=2))) 
+x$class =  factor(ifelse((x$V1 > -1 & x$V1 < 1 )&(x$V2 > -1 & x$V2 < 1 ), 0, 1))
+```
+
+```{r}
+index <- caret::createDataPartition(x$class,p=0.5,list=FALSE) 
+train_x <- x[index,] 
+test_x <- x[-index,] 
+ggplot(train_x) + 
+  geom_point(aes(V1, V2, color = class)) 
+```
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+log_reg = caret::train(class ~ .,   method='multinom',
+             trControl  = trControl,
+             data = train_x,
+             metric = "Accuracy",
+              MaxNWts = 10000000,
+             maxit = 10)
+log_reg_pred_train = predict(log_reg, train_x)
+log_reg_pred_test = predict(log_reg, test_x)
+train_accuracy = 
+  caret::confusionMatrix(log_reg_pred_train,train_x$class)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(log_reg_pred_test,test_x$class)$overall[1]
+print(paste("Multinomial Regression Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+ggplot(test_x) + 
+  geom_point(aes(V1, V2, color = log_reg_pred_test)) 
+```
+
+###Naive Bayes
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+nb_reg = caret::train(class ~ .,   method='naive_bayes',
+             trControl  = trControl,
+             data = train_x,
+             metric = "Accuracy")
+nb_reg_pred_train = predict(nb_reg, train_x)
+nb_reg_pred_test = predict(nb_reg, test_x)
+train_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_train,train_x$class)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_test,test_x$class)$overall[1]
+print(paste("Naive Bayes: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+ggplot(test_x) + 
+  geom_point(aes(V1, V2, color = nb_reg_pred_test)) 
+```
+
+###Multi Layer Perceptron
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+mlp_reg = caret::train(class ~ .,   method='mlp',
+             trControl  = trControl,
+             data = train_x,
+             metric = "Accuracy")
+mlp_reg_pred_train = predict(mlp_reg, train_x)
+mlp_reg_pred_test = predict(mlp_reg, test_x)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,train_x$class)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,test_x$class)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+ggplot(test_x) + 
+  geom_point(aes(V1, V2, color = mlp_reg_pred_test)) 
+```
+
+## Synthetic Data 2
+
+```{r}
+x <- as.data.frame(rmvnorm(n=400, sigma=matrix(c(1,0,0,1), ncol=2))) 
+x$class1 = ifelse(x$V1<0,0,1)
+x$class2 = ifelse(x$class1==0,1,0)
+x$flip = ifelse(runif(nrow(x))<0.3,1,0)
+x$class = factor(ifelse(x$flip==1,x$class2,x$class1))
+x = x[,c(1,2,6)]
+index <- caret::createDataPartition(x$class,p=0.5,list=FALSE) 
+train_x <- x[index,] 
+test_x <- x[-index,] 
+ggplot(train_x) + 
+  geom_point(aes(V1, V2, color = class)) 
+
+```
+
+### Logistic Regression
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+log_reg = caret::train(class ~ .,   method='multinom',
+             trControl  = trControl,
+             data = train_x,
+             metric = "Accuracy",
+              MaxNWts = 10000000,
+             maxit = 10)
+log_reg_pred_train = predict(log_reg, train_x)
+log_reg_pred_test = predict(log_reg, test_x)
+train_accuracy = 
+  caret::confusionMatrix(log_reg_pred_train,train_x$class)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(log_reg_pred_test,test_x$class)$overall[1]
+print(paste("Multinomial Regression Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+ggplot(test_x) + 
+  geom_point(aes(V1, V2, color = log_reg_pred_test)) 
+```
+
+###Multi Layer Perceptron
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+mlp_reg = caret::train(class ~ .,   method='mlp',
+             trControl  = trControl,
+             data = train_x,
+             metric = "Accuracy")
+mlp_reg_pred_train = predict(mlp_reg, train_x)
+mlp_reg_pred_test = predict(mlp_reg, test_x)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,train_x$class)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,test_x$class)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+ggplot(test_x) + 
+  geom_point(aes(V1, V2, color = mlp_reg_pred_test)) 
+```
+
+### L2 Regularization
+
+```{r}
+
+trControl <- trainControl(method  = "cv", number  = 2)
+mlp_reg = caret::train(class ~ .,   method = 'mlp',
+                       learnFuncParams=c(0.01),
+             trControl  = trControl,
+             data = train_x,
+             metric = "Accuracy")
+mlp_reg_pred_train = predict(mlp_reg, train_x)
+mlp_reg_pred_test = predict(mlp_reg, test_x)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,train_x$class)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,test_x$class)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+ggplot(test_x) + 
+  geom_point(aes(V1, V2, color = mlp_reg_pred_test)) 
+
+```
+
+# USe Case: Credit Risk - Identifying Bad Credits
+
+The dataset used for the use case is available at <https://datahub.io/machine-learning/credit-g> and is based on Dua, D. and Graff, C. (2019). UCI Machine Learning Repository [<http://archive.ics.uci.edu/ml>]. Irvine, CA: University of California, School of Information and Computer Science.
+
+```{r}
+df <- read.csv("credit-g.csv", stringsAsFactors=TRUE)
+```
+
+## Build models
+
+```{r warning=FALSE}
+index <- caret::createDataPartition(df$class,p=0.5,list=FALSE) 
+train_df <- df[index,] 
+test_df <- df[-index,] 
+trControl <- trainControl(method  = "cv", number  = 2)
+results_df = data.frame()
+
+for (mdl in c("rpart","naive_bayes","glm","rf","mlp"))
+{
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_df, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,train_df)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_df$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+    results_df = rbind(results_df,c(mdl,"Train",train_accuracy))
+    results_df = rbind(results_df,c(mdl,"Test",test_accuracy))
+    
+}
+colnames(results_df) = c("Model","Data","Accuracy")
+results_df$Accuracy = as.numeric(results_df$Accuracy)
+
+ggplot(results_df,aes(Model,Accuracy,fill=Data)) + 
+  geom_col(position = "dodge")+ coord_flip()
+
+```
+
+```{r warning=FALSE}
+    
+      mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_df, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,train_df)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_df$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,train_df$class))
+paste("Specificity = ",specificity(mdl_pred_train,train_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,train_df$class)) 
+caret::confusionMatrix(mdl_pred_train,train_df$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+ 
+```
+
+## Data Imbalance
+
+```{r}
+table(train_df$class)
+pie(table(train_df$class))
+```
+
+### Upsample
+
+```{r}
+prop.table(table(train_df$class))
+trainup<-upSample(x=train_df[,-ncol(train_df)],
+                  y=train_df$class)
+colnames(trainup) = c(colnames(trainup[-21]),"class")
+prop.table(table(trainup$class))
+```
+
+```{r}
+  mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = trainup, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,trainup)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,trainup$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,trainup$class))
+paste("Specificity = ",specificity(mdl_pred_train,trainup$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,trainup$class)) 
+caret::confusionMatrix(mdl_pred_train,trainup$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+```
+
+### SMOTE
+
+```{r warning=FALSE}
+library(UBL)
+set.seed(111)
+trainsmote = UBL::SmoteClassif(class~.,train_df, dist="HEOM")
+table(trainsmote$class)
+ mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = trainsmote, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,trainsmote)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,trainsmote$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,trainsmote$class))
+paste("Specificity = ",specificity(mdl_pred_train,trainsmote$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,trainsmote$class)) 
+caret::confusionMatrix(mdl_pred_train,trainsmote$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+
+
+```
+
+
+```{r warning=FALSE, message=FALSE}
+library(scatterplot3d)
+x = train_df[,c(2,5,13)]
+x$type = "Real Datapoints"
+x1 = trainsmote[,c(2,5,13)]
+x1$type = "SMOTE Datapoints"
+y = rbind(x,x1)
+y$type = factor(y$type)
+
+attach(y)
+colors <- c("#E69F00", "#56B4E9")
+colors <- colors[as.numeric(type)]
+scatterplot3d(x = duration, y = credit_amount, z = age, color = colors,pch=16,
+              grid=TRUE, box=FALSE)
+legend("right", legend = levels(type),
+      col =  c("#E69F00", "#56B4E9"), pch = 16)
+detach(y)
+```
+
+### downsampling
+
+```{r}
+prop.table(table(train_df$class))
+traindown<-downSample(x=train_df[,-ncol(train_df)],
+                  y=train_df$class)
+colnames(traindown) = c(colnames(traindown[-21]),"class")
+prop.table(table(traindown$class))
+```
+
+```{r warning=FALSE}
+  mdl = c("glm")
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = traindown, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,traindown)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,traindown$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+print("Train")
+paste("Accuracy = ",train_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_train,traindown$class))
+paste("Specificity = ",specificity(mdl_pred_train,traindown$class))
+paste("F1 Score = ",F_meas(mdl_pred_train,traindown$class)) 
+caret::confusionMatrix(mdl_pred_train,traindown$class)$table
+
+print("Test")
+paste("Accuracy = ",test_accuracy)
+paste("Sensitivity = ",sensitivity(mdl_pred_test,test_df$class))
+paste("Specificity = ",specificity(mdl_pred_test,test_df$class))
+paste("F1 Score = ",F_meas(mdl_pred_test,test_df$class)) 
+caret::confusionMatrix(mdl_pred_test,test_df$class)$table
+```
+
+## Final Model with SMOTE
+
+```{r warning=FALSE}
+train_df = trainsmote
+trControl <- trainControl(method  = "cv", number  = 2)
+results_df = data.frame()
+
+for (mdl in c("rpart","naive_bayes","glm","rf","mlp"))
+{
+     mdl_model <- caret::train(class ~ ., 
+             method=mdl, 
+             trControl  = trControl, 
+             data = train_df, 
+             metric     = "Accuracy") 
+     mdl_pred_test= predict(mdl_model,test_df)
+     mdl_pred_train= predict(mdl_model,train_df)
+    train_accuracy = 
+      caret::confusionMatrix(mdl_pred_train,train_df$class)$overall[1]
+    test_accuracy = 
+      caret::confusionMatrix(mdl_pred_test,test_df$class)$overall[1]
+    print(paste("Model ", mdl, " Accuracy: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+    results_df = rbind(results_df,c(mdl,"Train",train_accuracy))
+    results_df = rbind(results_df,c(mdl,"Test",test_accuracy))
+    
+}
+colnames(results_df) = c("Model","Data","Accuracy")
+results_df$Accuracy = as.numeric(results_df$Accuracy)
+
+ggplot(results_df,aes(Model,Accuracy,fill=Data)) + 
+  geom_col(position = "dodge")+ coord_flip()
+```
+
