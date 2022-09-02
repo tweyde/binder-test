@@ -1,0 +1,141 @@
+---
+title: 'Chapter 15: Timeseries and Forecasting'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: '2022'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+```
+
+# Load packages
+```{r message=FALSE}
+library(xts)
+library(forecast) 
+```
+
+In this notebook, we will look at timeseries and how to forecast future events and datapoints. Timeseries, such as the changing level profits quarter by quarter, or daily prices, are a central part of business analytics. We can decompose timeseries into trend, seasonality and noise using simple tools as shown below.
+
+# Timeseries make-up: Trend, Seasonality and Noise 
+```{r}
+df = read.csv("../../data/TOTALNSA.csv")
+df[['DATE']] = as.Date(df[['DATE']], format='%Y-%m-%d') 
+df <- ts(df$TOTALNSA, start = '1976', freq=12) 
+plot(decompose(df)) 
+```
+# Stripping away seasonality using Moving Averages 
+The underlying pattern in a timeseries is usually the key to forecasting it. The simplest way of extracting this underlying pattern is by using a moving average (MA). To use an MA you have to specify the number of data points (or the window) to average over, and below we simply use a 12month (backward looking) average, plotted for every point of the timeseries, which also has the effect of removing the seasonality: 
+
+```{r warning=FALSE}
+autoplot(df) + autolayer(ma(df, order = 12), colour = TRUE)  
+```
+
+# Simple forecasting: Extrapolation 
+
+The simplest form of forecasting is to assume the same value continues to occur in the future. Next most simple is straight line (or linear) forecast, extending a straight line fitted to the most recent datapoints into the future.
+
+* parameter h controls how far to extrapolate
+  
+```{r}
+df_ma <- ma(df, order = 12) 
+df_ma <- ts(na.exclude(df_ma)) 
+myforecast <- forecast(df_ma, level = c(0), h=36) 
+autoplot(myforecast) 
+```
+
+# Time dependence (Autocorrelation)
+In many timeseries, the value tomorrow will be dependent on the value we see today (and perhaps values in the past too). This time dependency (or temporal dependency) can be represented by autocorrelation (or self-correlation), which is exploited by autoregressive (AR) models, that simply weight past data points to provide a forecast for future data points.
+
+* The function <b>acf</b> computes estimates of autocorrelation.
+
+```{r}
+acf_obs = acf(df_ma, lag.max = length(df_ma), plot = FALSE) 
+plot(acf_obs, type = "l") 
+```
+
+# Forecasting using Autoregression (AR) 
+
+* You may want to have students write a loop to try different levels of lags (order.max parameter) and assess performance.
+
+```{r}
+ ar(df_ma,order.max = 1) 
+```
+
+* The following selects the best value of lag and provides a 120 period forecast.The number of lags is selected based on AIC measure. 
+
+```{r}
+res = ar(df_ma,aic=T,order.max = 12) 
+res
+pred_ar <- predict(res, n.ahead = 120)
+autoplot(df_ma) +  autolayer(predict(res, n.ahead = 120)$pred) 
+```
+
+# Detrending 
+In many cases the trend is a distraction and, in some, downright misleading for timeseries forecasting models. To remove the distraction of the trend we need to detrend our series. The simplest detrending approach is differencing, where we subtract each observation from the observation before (e.g., use this on vehicle sales), or divide each by the observation before (e.g., do for prices, where the change is the price return).
+
+```{r}
+# Detrending 
+s1 = df[1:length(df)-1]
+s2 = df[2:length(df)]
+df_detrended1 <- ts(s1-s2,frequency = 12)
+df_detrended2 <- ts(s1/s2,frequency = 12)
+```
+
+* Ask students to create a detrended AR model. 
+
+```{r}
+df_detrended1_ma <- ma(df_detrended1, order = 12) 
+df_detrended1_ma <- ts(na.exclude(df_detrended1_ma))
+res = ar(df_detrended1_ma,aic=T,order.max = 20) 
+res
+pred_ar <- predict(res, n.ahead = 120)
+autoplot(df_detrended1_ma) +  autolayer(predict(res, n.ahead = 120)$pred) 
+
+```
+
+# ARIMA
+ARIMA model specification: (p,d,q) are the AR order, the degree of differencing, and the MA order.
+
+```{r}
+arima(df_ma, order = c(1,1,2))
+```
+
+```{r}
+mod = auto.arima(df_ma,ic = "aic") 
+print(mod)  
+autoplot(forecast(mod, h = 120,level = 0)) 
+accuracy(mod)
+```
+
+* Have students build an ARIMA model on the df original dataset.
+
+
