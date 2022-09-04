@@ -1,0 +1,145 @@
+---
+title: 'Chapter 14: Use Case'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: '2022'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+```
+
+
+# Load packages
+```{r message=FALSE}
+library(car)
+library(caret)
+library(ggplot2)
+library(leaps)
+library(MASS)
+library(corrgram)
+```
+
+# Use Case:  Profit Forecasting, Steps for a Safety-first Linear Regression
+
+We have examined profit forecasting using R&D and marketing spend in a parametric context, where we had a good idea what the population distribution of profits was, and a non-parametric approach when we were not sure. We now tackle the same challenge but using a 4-point safety first process: 
+
+1. Check the data 
+2. Check for collinearities 
+3. Check model fit 
+4. Check residuals 
+
+## Check1: Check the data 
+
+Check1 is simply data exploration, examining distributions and relationships as we have seen in previous chapters. We also need to check for imbalances in the dataset, particularly in classification problems, where we might be forecasting credit card loan defaults from a dataset where only 5% of the rows represent defaults (we will address this later in the book). Can we take a view on what the population distribution is? If so, our model will always be more accurate if we use tests that assume distributions that most resemble the true population distribution of our data. 
+```{r}
+df_train = read.csv("../../data/50_Startups.csv")
+```
+
+## Check2: Check for collinearities 
+
+* corrgram package provides a nice visual
+
+```{r}
+library(corrgram)
+cor(df_train[1:3])
+corrgram(df_train[1:3],upper.panel = panel.pie)
+```
+
+We will use a rule of thumb that no 2 input variables should have a correlation coefficient of >0.5. You can see that R&D Spend and Marketing Spend have a correlation coefficient of 0.72 and so breach our rule of thumb.  We will use *differencing* to see if correlation is reduced.
+
+
+```{r}
+df_train_dif = df_train
+df_train_dif$Marketing.Spend = df_train_dif$Marketing.Spend - df_train_dif$R.D.Spend
+cor(df_train_dif[1:3])
+```
+## Check3: Check for Model Fit 
+
+We can now run the regression and assess the goodness of the model fit: 
+
+```{r}
+reg1 = lm(Profit ~ .-State, data=df_train_dif)
+summary(reg1)
+```
+
+
+
+```{r}
+plot(df_train_dif$R.D.Spend,df_train_dif$Profit,col="red",pch=16,xlab="R&D Spend",ylab="profit")
+points(df_train_dif$R.D.Spend,reg1$fitted.values,col="blue",pch=16)
+```
+
+## Check4: Check Residuals 
+
+```{r}
+plot(reg1$fitted.values,reg1$residuals,
+     xlab="Predicted Profit",
+     ylab = "Residual")
+abline(h=0,col="red")
+```
+
+```{r}
+plot(density(reg1$residuals))
+shapiro.test(reg1$residuals)
+```
+
+The plot and the normality test indicate that the normality assumption is a bit weak. 
+
+## Automating Model Construction
+
+
+In the R code below, we will run the subsets regression to select the right input variables: 
+
+```{r}
+library(leaps)
+bestsub1 =  regsubsets(Profit ~ . - State, data = df_train_dif,nvmax = 12)
+summary(bestsub1)
+names(summary(bestsub1))
+round(cbind( 
+    Cp     = summary(bestsub1)$cp,
+    r2     = summary(bestsub1)$rsq,
+    Adj_r2 = summary(bestsub1)$adjr2,
+    BIC    = summary(bestsub1)$bic
+),3)
+
+```
+
+The results recommend using only “R&D Spend” and “Marketing Spend” as the input variables. Rerunning the regression model yields the following outcome which is an improvement over the initial regression model (for example, based on Adjusted R^2 values): 
+
+```{r}
+reg2 = lm(Profit ~ R.D.Spend+Marketing.Spend, data=df_train_dif)
+summary(reg2)
+```
+
+
+
+

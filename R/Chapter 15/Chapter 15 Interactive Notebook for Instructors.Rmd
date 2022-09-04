@@ -37,11 +37,13 @@ inline_hook <- function (x) {
 knit_hooks$set(inline = inline_hook)
 ```
 
+
 # Load packages
 ```{r message=FALSE}
 library(xts)
 library(forecast) 
 ```
+
 
 In this notebook, we will look at timeseries and how to forecast future events and datapoints. Timeseries, such as the changing level profits quarter by quarter, or daily prices, are a central part of business analytics. We can decompose timeseries into trend, seasonality and noise using simple tools as shown below.
 
@@ -138,4 +140,7 @@ accuracy(mod)
 
 * Have students build an ARIMA model on the df original dataset.
 
+# Resources
 
+* R Cheatsheet for time series
+https://raw.githubusercontent.com/rstudio/cheatsheets/main/time-series.pdf

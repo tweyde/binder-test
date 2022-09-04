@@ -1,0 +1,107 @@
+---
+title: 'Chapter 12: Use Case Notebook for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 20202"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+
+# Load packages
+```{r message=FALSE}
+library(bbmle)
+```
+
+# Use Case: Profit Forecasting using Linear Regression 
+
+Forecasting profits, revenues, debt levels, and a whole host of other metrics and analytics is crucial in business. Linear regression provides the most widely used tool kit for forecasting.The dataset gives us a snapshot of annual data for a range of startup companies: research and development spending (R&D Spend), Administration expenses, Marketing Spend, tells us the State the startup is based in, and the Profit generated: 
+
+```{r}
+df = read.csv("../../data/50_Startups.csv")
+startups = sample(1:nrow(df),3)
+head(df)
+```
+
+## New Startups
+
+We will randomly select three new startups we want to assess from the dataframe. We will build the regression model based on 47 startups (we will term it training data) and then test how well the model predicts for the three new startups (we will term it the test data): 
+
+```{r}
+df_test = df[startups,]
+df_train =df[-startups,]
+```
+
+## Building the Model 
+
+```{r}
+reg1 = lm(Profit ~ .-State, data=df_train)
+summary(reg1)
+```
+
+
+```{r}
+plot(df_train$R.D.Spend,df_train$Profit,col="red",pch=16,xlab="R&D Spend",ylab="profit")
+points(df_train$R.D.Spend,reg1$fitted.values,col="blue",pch=16)
+segments(df_train$R.D.Spend,df_train$Profit,df_train$R.D.Spend,reg1$fitted.values)
+```
+## Forecast Startup Profits 
+
+```{r}
+df_test$prediction = predict.lm(reg1,df_test)
+df_test
+```
+
+```{r}
+plot(df_train$R.D.Spend,df_train$Profit,col="red",pch=16,xlab="R&D Spend",ylab="profit")
+points(df_train$R.D.Spend,reg1$fitted.values,col="blue",pch=16)
+#segments(df_train$R.D.Spend,df_train$Profit,df_train$R.D.Spend,reg1$fitted.values)
+points(df_test$R.D.Spend,df_test$prediction,col="yellow",pch=)
+points(df_test$R.D.Spend,df_test$Profit,col="green",pch=16)
+#segments(df_test$R.D.Spend,df_test$Profit,df_test$R.D.Spend,df_test$prediction,lwd = 5)
+abline(v = df_test$R.D.Spend)
+
+```
+## Dealing with Categorical Data 
+
+```{r}
+library(caret)
+dummy = dummyVars(" ~ .", data=df)
+final_df = data.frame(predict(dummy, newdata=df))
+head(final_df)
+```
+
+
+
+
+
+
+
