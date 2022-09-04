@@ -1,0 +1,109 @@
+---
+title: 'Chapter 8: Use Case Notebook for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "2022"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+# Load functions to compute p-value
+
+```{r}
+p_rtail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist>tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_ltail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x>tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist<tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_2tail = function(sampdist,tstat)
+  {
+hyp = mean(sampdist)  
+cutoff1 = hyp - abs(tstat-hyp)
+  cutoff2 = hyp + abs(tstat-hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<cutoff1 | df$temp.x>cutoff2
+  df1 = df[formula1,] 
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist<cutoff1 |  sampdist>cutoff2])/(length(sampdist))
+  return(pvalue)
+  }
+```
+
+
+# Use Case: Statistical Testing to Detect Cyber Attacks
+
+The Schneider-Electric dataset shows records of temperature sensor readings, relevant to IoT devices. Readings outside of the usual indicate a problem. Exactly the same principles could apply to monitoring employee activities in the WFH (Work from home) era, or monitoring team members for excellent or weak productivity: we are looking for exceptions.  
+
+We will explore two questions: what are the bounds of normal operation of the Schneider sensors (i.e., confidence intervals)? What is the probability that a recent high sensor reading represents failure or cyber-attack (i.e., statistical testing)? 
+
+To spot exceptions, outliers, we can plot a frequency distribution of sensor readings taking over a number of months, using 50 bins and a column chart. By eye we can see that the distribution is approximately normal, but with a number of outliers: 
+
+```{r}
+df <- read.csv("../../data/sensor-fault-detection.csv")
+hist(df$Value,breaks=50,
+     main = "Schneider-Electric: Distribution of Sensor Readings", xlab="Value")
+```
+
+```{r}
+boxplot(df$Value,horizontal = T)
+```
+
+
+```{r}
+p_2tail(df$Value,13)
+```
+
+
+In practice the sensor reading of 13 has a p-value of 0.0419 tells us that based on the assumptions of our test, there is only a 4.19% probability the null hypothesis should be not rejected. If we decided to have a 5% significance level, we would reject the null hypothesis, meaning that we would conclude that the sensor reading was not a normal operating reading and may represent a failure or cyber-attack. 
+
+
+
