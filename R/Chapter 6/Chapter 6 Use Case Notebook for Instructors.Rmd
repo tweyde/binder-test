@@ -41,33 +41,27 @@ In this use case, we will explore and understand data which captures financial a
 
 
 ```{r}
-df = read.csv("../../data/valuation multiples.csv")
-df$EBITDA_margin = df$EBITDA....millions./df$Revenues....millions.
+library(readxl)
+df <- read_excel("../../data/valuation multiples.xlsx")
 
-df$Net_Margin = df$Net.Income.....millions./df$Revenues....millions.
-
-df$Debt_EV = df$Total.Debt..including.leases.....millions./df$Enteprise.Value....millions.
-
-df$EBITDA_EV = df$EBITDA....millions./df$Enteprise.Value....millions. 
-
-df$EBITDA_multiple = df$EBITDA....millions./df$Enteprise.Value....millions. 
-
-library(corrgram)  
-
-corrgram(df,upper.panel = panel.pts,lower.panel= panel.pie,order = T )
+df$EBITDA_margin = df$`EBITDA ($ millions)`/df$`Revenues ($ millions)` 
+df$Net_Margin = df$`Net Income ( $ millions)`/df$`Revenues ($ millions)` 
+df$Debt_EV = df$`Total Debt (including leases) ($ millions)`/df$`Enteprise Value ($ millions)` 
+df$EBITDA_EV = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)` 
+df$EBITDA_multiple = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)` 
 ```
 
 Now we can calculate some financial analytics that will help us understand the valuation of different industries and create the bivariate plots: 
 
 ```{r}
 library(corrgram)
-corrgram(df,upper.panel = panel.pts,lower.panel= panel.pie,order = T )
+corrgram(df[13:15],upper.panel = panel.pts,lower.panel= panel.pie,order = T )
 ```
 
 Examining the heat map, we can see how different financial analytics compare across industries. The lighter the color the higher the correlation between two data items. First note that the diagonal line, moving top-left to bottom right, is correlating with a variable against itself, so shows a perfect correlation. We are interested in the off-diagonal areas of the heat map.   We can see, for example, that Enterprise Value has a high correlation with Invested Capital (a light color), and a moderately high correlation with Gross profit, indicating that the more profitable a firm the higher the enterprise value. 
 
 ```{r}
-# heatmap(cor(df),Rowv = NA, Colv = NA)
+heatmap(cor(df[-1]),Rowv = NA, Colv = NA)
 ```
 
 
