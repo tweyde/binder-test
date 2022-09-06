@@ -1,0 +1,583 @@
+---
+title: 'Chapter 2: Summarizing and Visualizing Data'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+
+We will focus on two important tools – summarization and visualization – which can explain trends, patterns, and exceptions by leveraging our visual skills. In fact the goal of these tools is to use visual representations to explore, make sense of, and communicate with data. It is often said that statistics is about proving what we expect, whereas visualization is about sense making and discovering what we did not expect. We will explore the data visualization packages ggplot and plotly, along with the grammar of graphics principles that aid in the design of effective visualizations to drive insights and understanding.  
+
+# Indexing and Subsetting 
+
+Indexing and subsetting are ways of viewing specific parts of a dataframe. For example, we use them if we want to see the first four rows of the dataframe df, or the first, third, and sixth columns. The syntax is as follows: 
+
+df[rows,columns] 
+df[,1]  
+
+Below are some examples using the ghw dataframe.
+
+```{r}
+weight = c(60,72,57,90,95,72) 
+height = c(1.75,1.8,1.65,1.9,1.74,1.91) 
+gender = c("m","f","m","f","f","m") 
+ghw=data.frame(gender,height,weight) 
+ghw[1,1] 
+ghw[,1:3] 
+ghw[2:5,] 
+ghw[,1] 
+ghw[c(1,3,6),2:3] 
+```
+It is sometimes useful to store the subset in a new variable. 
+
+```{r}
+x = ghw[1:3,] 
+dim(x) 
+```
+
+## Specifying Conditions 
+
+```{r}
+student <- read.csv("../../data/student.csv") 
+x1 = student[student$daysabs==0,] 
+head(x1) 
+
+x2 = student[student$daysabs==0 & student$math>60,] 
+head(x2) 
+```
+
+It is also useful to use formulas to create conditions. We can do this in R by saving a condition as a variable as shown below: 
+
+```{r}
+f1 = student$gender==0 & student$prog==3 & student$math>60 
+x3 = student[f1,] 
+head(x3) 
+```
+# Summarizing Data 
+Summaries are a quick and simple way to see our data in an organized fashion. In R, we will be using the whiteside dataframe in the MASS package, and the Arthritis dataframe in the vcd package, which need to be installed. 
+
+```{r message=FALSE}
+library(MASS)
+library(vcd)
+```
+
+## Factor Variables 
+The command we use to create summary tables of factor variables is table().
+
+```{r}
+table(Arthritis$Sex) 
+x = table(Arthritis$Treatment,Arthritis$Improved) 
+x 
+
+```
+
+If we want proportions in our table, we use the command prop.table(). 
+
+```{r}
+x = table(Arthritis$Treatment,Arthritis$Sex)
+prop.table(x,margin = 1)
+prop.table(x,margin = 2)
+```
+
+Three dimensional factor data requires the use of the command ftable. The 
+purpose of ftable is to combine the data into one table, rather than three, in a 
+manner that is simple to understand.   
+```{r}
+x = table(Arthritis$Treatment,Arthritis$Sex,Arthritis$Improved)
+ftable(x)
+```
+
+## Numeric Variables
+
+To create a table with a factor variable and a numeric variable, we use the following syntax: 
+
+aggregate(numeric variable, list(factor variable), simple statistic command).
+
+```{r}
+z = aggregate(whiteside$Temp,list(whiteside$Insul),mean) 
+head(z) 
+```
+# Graphing with ggplot2
+We will explore graphing with the `ggplot2` package. In fact, there is a package called `tidyverse` which includes `ggplot2` along with other really useful packages for data 
+manipulation. 
+
+
+```{r message=FALSE}
+library(tidyverse)
+library(MASS)
+```
+
+Let us take a look at the data frame `whiteside`, which we used before. 
+
+```{r}
+head(whiteside)
+```
+ggplot2 allows you to create data visualizations.  The process involves starting with a basic canvas, and then layering in new aspects of the graphics using +. To create the basic canvas, we use the ggplot() command. Inside the parenthesis we define the dataframe and variables we want on the x and y axes. aes() is used to create the axes. Note that for a single variable we can choose either the x or y axis and ignore the other. The other key command is geom, which stands for geometric object. This is used mainly to create different types of graphs. We will start creating one-dimensional graphs and then move on to two or more dimensions. 
+
+## One Variable Plots
+
+### One Factor Variable
+
+First, let us just create a basic canvas with the `whiteside` data set, where we 
+want to plot `Insul`. 
+
+```{r}
+ggplot(whiteside,aes(x = Insul))
+```
+
+Since this is factor data, we will plot a simple bar graph. 
+
+```{r}
+ggplot(whiteside,aes(x = Insul)) +
+  geom_bar()
+```
+
+This is the concept of layering; we added a bar graph on top of the basic 
+canvas. Now we can make a few additional adjustments. `col` makes the outline
+of the graph the color of your choice, and `fill` fills the space with the color
+of your choice. 
+
+```{r}
+ggplot(whiteside,aes(x = Insul)) +
+  geom_bar(col = "blue", fill = "orange") 
+```
+
+A few more adjustments. Let us change the background theme using `theme`. 
+
+```{r}
+ggplot(whiteside,aes(x = Insul)) +
+  geom_bar(col = "blue", fill = "orange") +
+  theme_light()
+```
+
+Now, let us flip the coordinates. 
+
+```{r}
+ggplot(whiteside,aes(x = Insul)) +
+  geom_bar(col = "blue", fill = "orange") +
+  theme_light() +
+  coord_flip()
+```
+
+You can also flip the graph by putting the Insul data on the y axis in the 
+`aes()` command. 
+
+```{r}
+ggplot(whiteside,aes(y = Insul)) +
+  geom_bar(col = "blue", fill = "orange") +
+  theme_light()
+```
+
+Another useful graph for factor data is a dot plot. 
+
+You can add titles and labels using `labs()`. 
+
+```{r}
+ggplot(whiteside,aes(x = Insul)) +
+  geom_dotplot(col = "blue", fill = "orange") +
+  theme_light() +
+  labs(title = "Insulation",
+       subtitle = "The Number of Observations With and Without Insulation",
+       y = "Number")
+```
+
+This is a very simple graph with a one factor variable. Let us move on to graphs
+with a single numeric variable. 
+
+### One Numeric Variable
+
+```{r}
+ggplot(whiteside, aes(x = Temp))
+```
+
+With a numeric variable, the simplest plot is a histogram. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp)) +
+  geom_histogram()
+```
+
+Obviously, we want to change how the numeric variable is binned to create the 
+histogram.
+
+```{r}
+ggplot(whiteside,aes(x = Temp)) +
+  geom_histogram(bins = 10, col = "purple", fill = "yellow") +
+  theme_light()
+```
+
+You can also specify the length of each bin using the `breaks` option. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp)) +
+  geom_histogram(breaks = c(-2,-1,0,2,5,10), col = "purple", fill = "yellow") +
+  theme_light()
+```
+
+It is probably more reasonable to have meaningful breaks. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp)) +
+  geom_histogram(breaks = seq(-2,10,by = 1), col = "purple", fill = "yellow") +
+  theme_light()
+```
+
+Sometimes, histograms don't give a completely accurate depiction of the data. 
+Imagine if you increase the number of bins, drew a point in the middle of each
+bin, and connected them with a line. This is how we create a density graph of 
+our data. Density graphs are more useful because they give a more accurate 
+picture of how the data is distributed. With histograms, it is a little 
+confusing because the shape looks different depending on how the bins are 
+defined. You can see this from the previous histograms of the temperature 
+variable. 
+
+Now, let us create a density graph. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp)) +
+  geom_density(col = "pink", fill = "yellow") +
+  theme_light()
+```
+
+What if you want to create a vertical line at the mean, maximum, and minimum 
+values of the temperature. First we need to compute the mean, max, and min, and 
+then we can draw vertical lines at these values. You can change the color and 
+size of the lines. 
+
+```{r}
+meantemp = mean(whiteside$Temp)
+mintemp = min(whiteside$Temp)
+maxtemp = max(whiteside$Temp)
+
+ggplot(whiteside,aes(x = Temp)) +
+  geom_density(col = "pink", fill = "yellow") +
+  geom_vline(xintercept = maxtemp, col = "blue", size = 2) +
+  geom_vline(xintercept = mintemp, col = "pink", size = 2) +
+  geom_vline(xintercept = meantemp, col = "purple", size = 2) +
+  theme_light()
+```
+
+With a single numeric variable, we can also create a boxplot. The code is 
+straightforward. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp)) +
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) +
+  theme_light()
+```
+
+## Two+ Variable Plots
+
+###  Numeric + Factor Variable
+
+Suppose you want to extend the above box plot by also considering the insulation. 
+In other words, you want two box plots, one before insulation and one after 
+insulation. This is straightforward. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp, col = Insul)) +
+  geom_boxplot(fill = "lightblue", size = 1) +
+  theme_light()
+```
+
+The above code creates a legend for the factor variable Insul. Another way to 
+create a box plot for before and after insulation is to write `y = Insul` in the 
+`aes()` command like so. 
+
+```{r}
+ggplot(whiteside,aes(x = Temp, y = Insul)) +
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) +
+  theme_light()
+```
+
+Instead of creating a legend, this method labels before and after Insul on the 
+y axis. 
+
+We can use the same logic for a density plot as well. 
+
+```{r}
+ggplot(whiteside, aes(x = Temp, col = Insul)) +
+  geom_density(fill = "yellow") +
+  theme_light()
+```
+
+This doesn't look very good. Here is an alternate to make both graphs clearer. 
+
+```{r}
+ggplot(whiteside, aes(x = Temp)) +
+  geom_density(aes(fill = Insul), alpha = .4) +
+  theme_light()
+```
+
+This works a little better, because we set `alpha = .4`, which improves the 
+transparency of the graph. An alternate code which accomplishes the same task is:
+
+```{r}
+ggplot(whiteside, aes(x = Temp, fill = Insul)) +
+  geom_density(alpha = .4) +
+  theme_light()
+```
+
+When you have one factor and one numeric variable, you can do a density or box
+plot, as we just demonstrated. 
+
+### Two+ Numeric Variables
+
+Now, let us plot temperature against gas consumption. 
+
+```{r}
+ggplot(whiteside, aes(x = Temp, y = Gas)) +
+  theme_light() + 
+  geom_point(pch = 7, col = "purple") +
+  geom_smooth()
+```
+
+`geom_point` gives you a scatterplot of the data. As before, you can change the 
+design of the points using `pch` and the color using `col`. However, `fill` will
+not work. `geom_smooth` gives you the best fit curve between x and y. The grey 
+region is the 95% confidence interval. You can make a few adjustments as below. 
+
+```{r}
+ggplot(whiteside, aes(x = Temp, y = Gas)) +
+  theme_light() + 
+  geom_point(pch = 13, col = "purple") +
+  geom_smooth(method = lm, se = FALSE)
+```
+
+`method = lm` gives you a linear model of the relationship between x and y.
+`se = FALSE` removes the confidence interval around the smoothing function. 
+
+Now, we can also add a third dimension if it is a factor variable. In this 
+example, suppose we want to plot the relationship between temperature and gas
+consumption both before and after insulation. One simple way to do this is to 
+use the color option to add the third dimension. 
+
+```{r}
+ggplot(whiteside, aes(x = Temp, y = Gas, col = Insul)) +
+  theme_light() + 
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE)
+```
+
+As you can see, the graph clearly illustrates the gas consumption is lower after 
+insulation, but the gap between the two narrows as the temperature increases.
+
+You can also use the `size` option to add another dimension. 
+
+```{r warning=FALSE}
+ggplot(whiteside, aes(x = Temp, y = Gas, size = Insul)) +
+  theme_light() + 
+  geom_point(col = "magenta") 
+```
+
+You can also use facets for the third dimension using the `facet_grid` command. 
+Facets are a way to create multiple subplots. We use the `~` in the facet 
+function to control how the subplots are displayed. `.` is the replacement for 
+other elements of the plot. We will try this a few different ways to show the 
+results. 
+
+```{r}
+ggplot(whiteside, aes(x = Temp, y = Gas)) +
+  geom_point() +
+  facet_grid(Insul~.)
+```
+
+```{r}
+ggplot(whiteside, aes(x = Temp, y = Gas)) +
+  geom_point() +
+  facet_grid(.~Insul)
+```
+
+Notice that the variable to the left of the tilde makes up the rows and the 
+variable to the right makes up the columns of the subplots. 
+
+### Two+ Factor Variables
+
+For graphing two factor variables, we will use the `mpg` data frame, as 
+`whiteside` does not have two factor variables. 
+
+```{r}
+head(mpg)
+```
+
+Let us first plot the `class` variable. 
+
+```{r}
+ggplot(mpg, aes(x = class)) +
+  geom_bar()
+```
+
+Now, suppose we also want to add `drv` to this plot. 
+
+```{r}
+ggplot(mpg, aes(x = class)) +
+  geom_bar(aes(fill = drv))
+```
+
+We use `fill` to add the second dimension. Here is an alternate view. 
+
+```{r}
+ggplot(mpg, aes(x = class)) +
+  geom_bar(aes(fill = drv), position = "dodge")
+```
+
+We can also facet this. 
+
+```{r}
+ggplot(mpg, aes(x = class)) +
+  geom_bar(aes(fill = drv)) +
+  facet_grid(year~.)
+```
+
+Now we've added three dimensions to the figure. 
+
+## Interactivity With Plotly
+
+You can add some interactivity with the `plotly` package. Let us first load it. 
+
+```{r,message=FALSE}
+library(plotly)
+```
+
+Once this package is loaded, you can add some interactivity for any ggplot. For
+example, 
+
+```{r}
+g1 = ggplot(mpg, aes(x = class)) +
+  geom_bar(aes(fill = drv)) +
+  facet_grid(year~.) 
+ggplotly(g1)
+```
+
+Here is another example. 
+
+```{r}
+g2 = ggplot(whiteside, aes(x = Temp, y = Gas, col = Insul)) +
+  theme_light() + 
+  geom_point() +
+  geom_smooth(method = lm, se = FALSE)
+ggplotly(g2)
+```
+
+# Final Remarks
+
+We have touched upon some of the basics with `ggplot2` and `plotly`. There is a 
+lot more you can do with it. Research it further and do check out some of the 
+links below. One important thing to remember is that the plots you create be 
+visually appealing, concise, and most importantly informative. For example, 
+the various visualizations we did with the `whiteside` data frame tell us some 
+useful information as follows:
+
+1. There are more observations after insulation in comparison to before.   
+2. The median temperature after insulation is higher than before.   
+3. The gas consumption lowered after insulation, but the difference narrows as
+the temperature increases.   
+
+Good visualizations provide you good insights. 
+
+# Useful Links
+[link] https://dereksonderegger.github.io/570L/9-graphing-using-ggplot2.html   
+[link] https://r4ds.had.co.nz/data-visualisation.html  
+[link] https://uc-r.github.io/ggplot_intro  
+[link] https://www.r-graph-gallery.com/ 
+
+# Use Case: Visualizing Industry Valuations
+
+Sometimes, simply sorting and coloring items can help. For instance, if we were an entrepreneur or angel/venture cap investor, visualization can be used to quickly grasp which industries we should focus on, and which we should probably avoid. Earnings before interest tax, depreciation and amortization (EBITDA) is a commonly used analytic to proxy the cash generated by a business. It is widely used in corporate financial analysis, from credit analysis, through to public and private equities analysis. We will use a business analytic called “EBITDA multiple”, which is widely used in venture capital (VC) to value businesses: 
+
+EBITDA multiple  = $EV / EBITDA $
+
+Where Enterprise Value (EV) is the total value of a company’s equity plus debt capital, (including minority interests). Different industries will be valued by investors at different EBITDA multiples based on their perceived risk and return potential, or how “hot” an industry is considered by investors. Two companies in different industries, identical in all other respects, may be valued quite differently given these perceptions. (Investors can make excess returns if these perceptions are incorrect).  
+
+## Sorting and Colors 
+
+We can visualize the EBITDA multiples the market is currently pricing in, across industries by sorting sectors by EBITDA multiple, and plotting on a column chart. First, we create key indices. 
+
+```{r}
+library(readxl)
+valuation_multiples <- read_excel("../../data/valuation multiples.xlsx")
+df = valuation_multiples
+df$EBITDA_margin = df$`EBITDA ($ millions)`/df$`Revenues ($ millions)`
+df$Net_Margin = df$`Net Income ( $ millions)`/df$`Revenues ($ millions)`
+df$Debt_EV = df$`Total Debt (including leases) ($ millions)`/df$`Enteprise Value ($ millions)`
+df$EBITDA_EV = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)`
+df$EBITDA_multiple = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)`
+colnames(df)[1]="IndustryName"
+
+```
+
+
+```{r}
+df = df[order(df$EBITDA_multiple),]
+ggplot(df,aes(x =`IndustryName`, y = EBITDA_multiple)) + 
+  geom_col(size = 1) +
+ theme(axis.text.x = element_text(angle = 90))
+```
+## Box plots to examine distributions of analytics: 
+
+Box plots allow us to visualize the distribution of analytics such as “EBITDA multiple”, as you can see in the box plot below: 
+```{r}
+ggplot(df,aes(x = EBITDA_multiple)) + 
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) + 
+  theme_light() 
+```
+## Scatter plots to exploring drivers of valuation 
+
+As VC investors we would want to understand what is driving different industry valuations and whether these drivers seem sensible. We can either resolve this question heuristically, i.e., through trial and error and gut instinct, or through a process of data exploration. We previously saw the power of scatter plots; we can expand this idea using bubble plots: 
+
+```{r}
+ggplot(df,aes(x =EBITDA_multiple, y = `EBITDA ($ millions)`),size=`Market Cap ($ millions)`) +   geom_point(col="magenta") 
+```
+We can also quickly analyze a pairwise relationship by plotting a line of best fit: 
+
+```{r}
+ggplot(df,aes(x =EBITDA_multiple, y = `EBITDA ($ millions)`)) + 
+  geom_point(col="magenta")+
+   geom_smooth()
+```
+## Clustering 
+
+We can use our features to group similar instances together. This is called clustering. In this case we want to see which industries are similar with respect to certain vital stats: EBITDA margin, EBITDA to EV, and net margin. 
+
+```{r}
+clusters = hclust(dist(df[, c(1,3,6,9,13)]),method = "ward.D")
+plot(clusters,labels = df$`IndustryName`)
+```
+
+
+
+
+
+
+
+
