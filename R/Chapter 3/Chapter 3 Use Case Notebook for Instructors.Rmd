@@ -1,0 +1,91 @@
+---
+title: 'Chapter 3: Use Case Notebook for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+
+```{r, message = FALSE}
+library(dplyr)
+library(tidyverse)
+library(readxl)
+```
+
+# Use Case: Filter, Sort, Bin Sales data 
+
+```{r}
+df = read_excel("../../data/supermarket_sales.xlsx")
+```
+
+Select rows where the “Gender” column equals “Female”: 
+
+```{r}
+head(df[df$Gender == 'Female',])
+```
+
+
+Sort this filtered dataframe by “Quantity” of sales, with a descending sort (i.e., highest values are first): 
+```{r}
+df_female = df[df$Gender == 'Female',]
+df_female = df_female[order(df_female$Quantity,decreasing = T),]
+```
+
+We now want to examine whether the hour of the day has a bearing on sales volumes, for instance if most sales happen in the final hour of business of the day, and if so, if we should keep stores open for one hour more to encourage more sales. To do this we can “bin” the rows into equally sized bins.  
+
+```{r}
+
+df_female$hour = format(as.POSIXct(df_female$Time, format="%Y-%m-%d %H:%M"), format="%H")
+df_female$hour = as.numeric(df_female$hour)
+breaks <- c(0,2,4,6,8,10,12,14,16,18,20,22)
+tags <- c("[0-2)","[2-4)", "[4-6)", "[6-8)", "[8-10)", "[10-12)","[12-14)", "[14-16)","[16-18)", "[18-20)","[20-22)")
+
+df_female$time_bin <- cut(df_female$hour, 
+                  breaks=breaks, 
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=tags)
+
+
+```
+
+We can now plot the relationship between Total sales in each time bin: 
+
+```{r}
+ggplot(df_female,aes(x =time_bin, y = Quantity)) + 
+  geom_col(size = 1)
+```
+

@@ -1,0 +1,573 @@
+---
+title: 'Chapter 3: Managing and Preparing Data'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+# Introduction
+
+In this lesson, we will explore a very popular package called `dplyr`. Similar 
+to `ggplot` it provides common verbs useful for data manipulation and management.
+If you already installed `tidyverse`, you do not have to install `dplyr` because
+it is included in this package. Once installed, load the package. 
+
+```{r, message = FALSE}
+defaultW = getOption("warn")
+options(warn = -1)
+library(dplyr)
+library(tidyverse)
+options(warn = defaultW)
+```
+
+Some of the common verbs used in `dplyr` are as follows:  
+
+`select()` select columns  
+`filter()`	filter rows  
+`arrange()`	re-order or arrange rows  
+`mutate()`	create new columns  
+`summarise()`	summarize values  
+`group_by()`	allows for operating on groups   
+
+To see the power of `dplyr`, we will work with a fairly complex data set. There
+is a data set called `hflights` in a package also called `hflights`. Let us load 
+and take a look at this data set. 
+
+```{r, message = FALSE}
+defaultW = getOption("warn")
+options(warn = -1)
+library(hflights)
+options(warn = defaultW)
+```
+
+Let us view the data set. 
+
+```{r}
+glimpse(hflights)
+```
+
+As you can see, it's a fairly complex data set, with 227496 rows and 21 columns. 
+We can use a special type of table called `kable` to view parts of the data. 
+
+```{r}
+knitr::kable(hflights[1:5,1:8],row.names = F)
+```
+
+We will start to explore each of the important "verbs" in `dplyr`. 
+
+# Select
+
+Select is used to select columns in a data frame and the syntax is   
+`select(data, columns)`.  
+From this data set, here are some examples. 
+
+```{r}
+d1 = select(hflights, ArrTime, DepTime)
+knitr::kable(d1[1:5,])
+```
+
+You can also search based on names of the columns. The following helper functions
+can be useful sometimes.   
+
+## Helper Functions
+
+`dplyr` comes with a set of helper functions that can help you select groups of 
+variables inside a `select()` call:  
+
+`starts_with("X")` every name that starts with "X",  
+`ends_with("X")` every name that ends with "X",  
+`contains("X")` every name that contains "X",  
+`matches("X")` every name that matches "X", where "X" can be a regular expression,  
+`num_range("x", 1:5)` the variables named x01, x02, x03, x04 and x05,  
+`one_of(x)` every name that appears in x, which should be a character vector.  
+
+When you refer to columns directly inside `select()`, you don't use quotes. If you 
+use the helper functions, you do use quotes.  
+
+For example, let us say you want to see all the columns which contain the word 
+"time" in the name. 
+
+```{r}
+d2 = select(hflights, contains("time"))
+knitr::kable(d2[1:5,])
+```
+
+All of these columns contain "time". Keep in mind that it is not case sensitive. 
+
+Now suppose you want to select columns that contain either "time" or "delay."
+
+```{r}
+d3 = select(hflights, contains("time"), contains("delay"))
+knitr::kable(d3[1:5,])
+```
+
+You will notice that some columns are numeric while others are not. The following
+can be useful to pull out columns that are of a particular data type. Let us bring
+out all of the numeric columns. 
+
+```{r}
+d4 = select_if(hflights, is.numeric)
+knitr::kable(d4[1:5,],row.names = F)
+```
+
+vice versa, let us bring out all the character columns. 
+
+```{r}
+d5 = select_if(hflights, is.character)
+knitr::kable(d5[1:5,],row.names = F)
+```
+
+# Filter Function
+
+The `filter()` function is used to select rows. For example, let us subset the 
+rows with a distance over 1000 miles. 
+
+```{r}
+d6 = filter(hflights, Distance>1000)
+dim(d6)
+```
+
+Suppose you want to get all the flights that were canceled because of weather or
+security. These are labelled with the characters "B" and "D" in the 
+CancellationCode column. 
+
+```{r}
+d7 = filter(hflights, CancellationCode == "D" | CancellationCode == "B")
+dim(d7)
+```
+
+Another way to write this is:
+
+```{r}
+d8 = filter(hflights, CancellationCode %in% c("B","D"))
+dim(d8)
+```
+
+`%in%` identifies the elements belonging to the vector `CancellationCode`. Note
+that we always use `c()`, even if we are only looking for the rows which contain
+one element. 
+
+Let us do two more.   
+1. Select all the flights where the total delay, which is ArrDelay + DepDelay, 
+is more than one hour. Note that the time is in minutes.   
+2. Select all flights where AirTime is less than the total delay (what we 
+calculated before).
+
+```{r}
+hflights$TotalDelay = hflights$ArrDelay + hflights$DepDelay 
+d9 = filter(hflights, TotalDelay>60)
+dim(d9)
+knitr::kable(d9[1:5,],row.names = F)
+
+d10 = filter(hflights, AirTime<TotalDelay)
+knitr::kable(d10[1:5,],row.names = F)
+```
+
+Another way to do this is as follows:
+
+```{r}
+d9 = filter(hflights, (ArrDelay + DepDelay)>60)
+dim(d9)
+knitr::kable(d9[1:5,],row.names = F)
+
+d10 = filter(hflights, AirTime<(ArrDelay + DepDelay))
+knitr::kable(d10[1:5,],row.names = F)
+```
+
+Now, suppose we want to create a data set with only the columns FlightNum, 
+DayOfWeek, ArrTime, ArrDelay, and DepDelay for all the flights where AirTime is 
+less than the total delay (ArrDelay + DepDelay). 
+
+```{r}
+d11 = filter(hflights, AirTime<(ArrDelay + DepDelay))
+d12 = select(d11, FlightNum, DayOfWeek, AirTime, ArrDelay, DepDelay)
+knitr::kable(d12[1:5,],row.names = F)
+```
+
+Note that if you have more than one condition, you can simply add them after
+a comma. 
+
+# Piping 
+
+Sometimes, doing a series of operations on a variable can become complicated, 
+especially when many parenthesis are involved. For example, the following
+can be difficult to understand. Notice the number of parenthesis involved in 
+creating the function. 
+
+```{r}
+x = c(25,2,72,456,8,34,6,7,2,3,4)
+round(exp(sqrt(log(x))), 1)
+```
+
+Piping is an important operator that can make writing such expressions simpler. 
+The operator for piping is `%>%` and it comes with the `dplyr` package. The 
+above example can be written using piping as follows.
+
+```{r}
+x %>% log() %>%
+  sqrt() %>%
+  exp() %>%
+  round(1)
+```
+
+The mathematical reasoning behind piping has to do with composite functions. 
+When solving f(g(x)), the input x is run through the function g, and then g(x) is 
+run through f. This would be written like so:     
+`x  %>%    
+g()  %>%     
+f()`     
+
+To explain further, `function(argument)` is rewritten as `argument %>% function()`. 
+
+Now, let us rewrite the last example we did in the previous section using piping. 
+
+```{r}
+d12 = hflights %>% 
+  filter(ArrTime<(ArrDelay + DepDelay)) %>%
+  select(FlightNum, DayOfWeek, ArrTime, ArrDelay, DepDelay)
+knitr::kable(d12[1:5,])
+```
+
+To the extent possible, try to use the pipe operator to write your code. Check 
+out the further reading for a more in-depth piping tutorial. 
+
+# Rename Function
+
+The rename function can be used to rename the columns of a data frame. The 
+syntax is:  
+`rename(dataframe, new name = old name)`    
+
+Let us say we want to change the columns DepTime to DepartureTime and ArrTime 
+to ArrivalTime. We will use the piping method. 
+
+```{r}
+d13 = hflights %>% 
+  rename(DepartureTime = DepTime, ArrivalTime=ArrTime)
+knitr::kable(d13[1:5,],row.names = F)
+```
+
+The basic way to do this is as follows:
+
+```{r}
+d14 = rename(hflights, DepartureTime = DepTime, ArrivalTime=ArrTime)
+knitr::kable(d14[1:5,],row.names = F)
+```
+
+# Mutate Function
+
+This option is used to create new columns based on existing columns. The basic
+syntax is:    
+`mutate(dataframe, new column name = expression)`  
+
+Suppose we want to create the following columns using piping:   
+ActualGroundTime = ActualElapsedTime - AirTime  
+TaxiTime = TaxiIn + TaxiOut  
+AvgSpeed = 60 \times (Distance / AirTime)   
+
+```{r}
+d15 = hflights %>%
+  mutate(ActualGroundTime = ActualElapsedTime - AirTime, TaxiTime = TaxiIn + 
+           TaxiOut, AvgSpeed = 60 * (Distance/AirTime))
+knitr::kable(d15[1:5,],row.names = F)
+```
+
+The basic way to do this is as follows:
+
+```{r}
+d16 = mutate(hflights, ActualGroundTime = ActualElapsedTime - AirTime, TaxiTime = TaxiIn + 
+           TaxiOut, AvgSpeed = 60 * (Distance/AirTime))
+knitr::kable(d16[1:5,],row.names = F)
+```
+
+# Arrange Function
+
+This function is used to reorder the rows of a data frame in ascending or 
+descending order. The basic syntax is:  
+`arrange(dataframe, columns to arrange by)`  
+
+Let us say we want to sort the data frame `hflights` by AirTime. 
+
+```{r}
+d17 = hflights %>%
+  arrange(AirTime)
+knitr::kable(d17[1:5,],row.names = F)
+```
+
+You can sort by multiple columns and in descending order using `desc()`. Note 
+that ascending order is the default. 
+
+```{r}
+d18 = hflights %>%
+  arrange(AirTime, UniqueCarrier, desc(Month))
+knitr::kable(d18[1:5,],row.names = F)
+```
+
+# Summarize Function
+
+This function is used to summarize data, but it usually goes hand-in-hand with 
+the `group_by()` function. The syntax is:  
+
+`g1 = group_by(dataframe, factor variables you want to group by)`  
+`s1 = summarize(g1, variable name = some aggregating function)`  
+
+Let us say we want to get the average air time for each unique carrier. 
+
+```{r}
+g1 = group_by(hflights, UniqueCarrier)
+s1 = summarize(g1, AvgTime = mean(AirTime, na.rm = T))
+knitr::kable(s1)
+```
+
+Remember to add `na.rm = T` if the data contains missing values. 
+
+You can also pipe this to make it read better. 
+
+```{r}
+s2 = hflights %>%
+  group_by(UniqueCarrier) %>%
+  summarize(AvgTime = mean(AirTime, na.rm = T))
+knitr::kable(s2)
+```
+
+You can add a number of other statistics in addition to the mean. You can use
+the basic aggregating functions that R provides, such as:    
+
+`min(x)` - minimum value of vector x  
+`max(x)` - maximum value of vector x  
+`mean(x)` - mean value of vector x  
+`median(x)` - median value of vector x  
+`quantile(x, p)` - pth quantile of vector x  
+`sd(x)` - standard deviation of vector x  
+`var(x)` - variance of vector x  
+`IQR(x)` - Inter Quartile Range (IQR) of vector x  
+`diff(range(x))` - total range of vector x  
+
+In addition, `dplyr` provides a number of other aggregate functions which 
+include:   
+
+`first(x)` - The first element of vector x    
+`last(x)` - The last element of vector x    
+`nth(x, n)` - The nth element of vector x    
+`n()` - The number of rows in the data.frame or group of observations that `summarise()` describes    
+`n_distinct(x)` - The number of unique values in vector x    
+
+Additionally, you can get multiple statistics from multiple groups. Here is an 
+example. 
+
+```{r}
+s3 = hflights %>%
+  group_by(UniqueCarrier, Origin) %>%
+  summarize(AvgTime = mean(AirTime, na.rm = T), NumFlights = n(), 
+            LongestFlightTime = max(AirTime, na.rm = T))
+knitr::kable(s3)
+```
+
+```{r}
+library(ggplot2)
+s3 = hflights %>%
+  group_by(UniqueCarrier, Origin) %>%
+  summarize(AvgTime = mean(AirTime, na.rm = T), NumFlights = n(), 
+            LongestFlightTime = max(AirTime, na.rm = T))
+
+```
+
+Once a summary is created, you can easily plot this using `ggplot2`. 
+
+```{r}
+ggplot(s3, aes(x=AvgTime, y = LongestFlightTime, col = Origin)) +
+  geom_point() +
+  theme_light() +
+  geom_smooth(method = lm, se = F)
+```
+
+Now, we can pipe this altogether, 
+
+```{r}
+hflights %>%
+  group_by(UniqueCarrier, Origin) %>%
+  summarize(AvgTime = mean(AirTime, na.rm = T), NumFlights = n(), 
+            LongestFlightTime = max(AirTime, na.rm = T)) %>%
+  ggplot(aes(x=AvgTime, y = LongestFlightTime, col = Origin)) +
+  geom_point()+
+  theme_light() +
+  geom_smooth(method = lm, se = F)
+  
+```
+
+If you want one summary for the entire data frame, use the following syntax:
+
+`summarize(dataframe, variable name = some aggregating function)`  
+
+# Data Reshaping
+
+There are times when the data is not stored in the format you need for 
+analysis. Let us take a look at an example. We will work with a data frame called
+`Rainfall`. This is an Excel file you can download from the link at the bottom of this page. 
+
+```{r}
+library(readxl)
+Rainfall <- read_excel("../../data/Rainfall.xlsx")
+knitr::kable(Rainfall[1:5,])
+```
+
+The last five columns of the data frame contain information about amount of 
+rainfall. We may want to compress these five columns into two columns (this is 
+called the long form). The first column can be called "TotalRainfall", which 
+will indicate annual, monsoon, etc. The second column, which we will call 
+"Amount(mm)", will contain the actual rainfall amount. 
+
+The `dplyr` package contains two important verbs for data reshaping. 
+
+1. `gather()` This will gather multiple columns into two columns.   
+2. `spread()` This does the opposite. It takes two columns and spreads them into
+multiple columns.   
+
+To create the data in the long form, the code is:
+
+```{r}
+Rainfall_long =  Rainfall %>%
+  gather(key = "TotalRainfall", value = "Amount(mm)",
+         `Annual total rainfall (mm)`: `Post monsoon total rainfall (mm)`)
+
+knitr::kable(Rainfall_long[1:10,])
+```
+
+It's as simple as that!
+
+You can also convert data in the long format to the wide format. The syntax is:  
+
+```{r}
+Rainfall_wide = Rainfall_long %>%
+  spread(key = "TotalRainfall", value = "Amount(mm)")
+knitr::kable(Rainfall_wide[1:10,])
+```
+
+# Recoding Factor Variables
+
+In the long format, the data in the `TotalRainfall` column are too long. Let us 
+suppose we want to recode these values as follows:   
+
+TotalRainfall | TotalRainfall_New
+--------------|------------------
+Annual total rainfall (mm)| Annual
+Winter total rainfall (mm)| Winter
+Summer total rainfall (mm)| Summer      
+Monsoon total rainfall (mm)| Monsoon
+Post monsoon total rainfall (mm)| PostMonsoon
+-----------------------------------------------
+
+The strategy is as follows:  
+
+1. Create a recode table with the existing values and new values of the factor
+variable.  
+2. Join the data frame with the recode table.   
+
+```{r}
+TotalRainfall = c("Annual total rainfall (mm)", "Winter total rainfall (mm)", 
+                  "Summer total rainfall (mm)","Monsoon total rainfall (mm)", 
+                  "Post monsoon total rainfall (mm)")
+
+TotalRainfall_new = c("Annual","Winter","Summer","Monsoon","PostMonsoon")
+
+RecodeTable = data.frame(TotalRainfall,TotalRainfall_new)
+
+knitr::kable(RecodeTable)
+
+```
+
+Now, we need to join Rainfall_long and RecodeTable. 
+
+```{r}
+NewRainfall = left_join(Rainfall_long, RecodeTable, by = "TotalRainfall")
+
+NewRainfall = NewRainfall %>%
+  select(-TotalRainfall)
+
+knitr::kable(NewRainfall[1:10,])
+```
+
+
+
+# Use Case: Filter, Sort, Bin Sales data 
+
+```{r}
+df = read_excel("../../data/supermarket_sales.xlsx")
+```
+
+Select rows where the “Gender” column equals “Female”: 
+
+```{r}
+head(df[df$Gender == 'Female',])
+```
+
+
+Sort this filtered dataframe by “Quantity” of sales, with a descending sort (i.e., highest values are first): 
+```{r}
+df_female = df[df$Gender == 'Female',]
+df_female = df_female[order(df_female$Quantity,decreasing = T),]
+```
+
+We now want to examine whether the hour of the day has a bearing on sales volumes, for instance if most sales happen in the final hour of business of the day, and if so, if we should keep stores open for one hour more to encourage more sales. To do this we can “bin” the rows into equally sized bins.  
+
+```{r}
+
+df_female$hour = format(as.POSIXct(df_female$Time, format="%Y-%m-%d %H:%M"), format="%H")
+df_female$hour = as.numeric(df_female$hour)
+breaks <- c(0,2,4,6,8,10,12,14,16,18,20,22)
+tags <- c("[0-2)","[2-4)", "[4-6)", "[6-8)", "[8-10)", "[10-12)","[12-14)", "[14-16)","[16-18)", "[18-20)","[20-22)")
+
+df_female$time_bin <- cut(df_female$hour, 
+                  breaks=breaks, 
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=tags)
+
+
+```
+
+We can now plot the relationship between Total sales in each time bin: 
+
+```{r}
+ggplot(df_female,aes(x =time_bin, y = Quantity)) + 
+  geom_col(size = 1)
+```
+
+
+# Further Reading
+[link] https://www.listendata.com/2016/08/dplyr-tutorial.html#select-Function  
+[link] https://dereksonderegger.github.io/570L/7-data-manipulation.html  
+[link] https://genomicsclass.github.io/book/pages/dplyr_tutorial.html    
+[link] https://www.datacamp.com/community/tutorials/pipe-r-tutorial  
+
+
+
