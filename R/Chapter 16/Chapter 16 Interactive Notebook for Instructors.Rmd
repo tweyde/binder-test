@@ -75,15 +75,30 @@ fancyRpartPlot(clf_full,sub = '',main = "Full Decision Tree")
 # Prediction and Accuracy 
 
 ```{r}
-print(train[1,])
+print(test [1,])
+print(predict(clf_full,newdata = test[1,]))
+```
+```{r}
+prediction = predict(clf_full,newdata = test,type = "class")
+correct = 0
+for(i in 1:nrow(test))
+  if(prediction[i]==test$Species[i])
+    correct = correct + 1
+accuracy = correct / nrow(test)
+print(accuracy)
 ```
 
 ## Training accuracy
 * The predict function can be used to predict the outcome on new datasets. First, we evaluate how the model performs on the training data (which is the same data used for building the model).
 ```{r}
-prediction = predict(clf_full,newdata = train,type = "class")
-accuracy = sum(prediction==train$Species)/nrow(train)
-print(accuracy)
+total = nrow(train)
+correct = 0 
+for(i in 1:total){
+  pred = predict( clf_full, newdata = train[i,])
+  correct = correct + pred[train$Species[i]]
+}
+accuracy = correct / total
+print(accuracy) 
 ```
 
 ## Accuracy on the test data
