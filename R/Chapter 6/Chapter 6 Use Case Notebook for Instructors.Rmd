@@ -1,0 +1,77 @@
+---
+title: 'Chapter 6: Use Case Notebook for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+# Use Case - Data Exploration
+
+In this use case, we will explore and understand data which captures financial analytics for 94 industries, such as Air Transport, Utility (Water)and soon, in the US market. 
+
+
+```{r}
+library(readxl)
+df <- read_excel("../../data/valuation multiples.xlsx")
+
+df$EBITDA_margin = df$`EBITDA ($ millions)`/df$`Revenues ($ millions)` 
+df$Net_Margin = df$`Net Income ( $ millions)`/df$`Revenues ($ millions)` 
+df$Debt_EV = df$`Total Debt (including leases) ($ millions)`/df$`Enteprise Value ($ millions)` 
+df$EBITDA_EV = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)` 
+df$EBITDA_multiple = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)` 
+```
+
+Now we can calculate some financial analytics that will help us understand the valuation of different industries and create the bivariate plots: 
+
+```{r}
+library(corrgram)
+corrgram(df[13:15],upper.panel = panel.pts,lower.panel= panel.pie,order = T )
+```
+
+Examining the heat map, we can see how different financial analytics compare across industries. The lighter the color the higher the correlation between two data items. First note that the diagonal line, moving top-left to bottom right, is correlating with a variable against itself, so shows a perfect correlation. We are interested in the off-diagonal areas of the heat map.   We can see, for example, that Enterprise Value has a high correlation with Invested Capital (a light color), and a moderately high correlation with Gross profit, indicating that the more profitable a firm the higher the enterprise value. 
+
+```{r}
+heatmap(cor(df[-1]),Rowv = NA, Colv = NA)
+```
+
+
+
+
+
+
+
+
+
+
+
+

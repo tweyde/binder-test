@@ -1,0 +1,371 @@
+---
+title: 'Chapter 14: Interactive Notebook for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: '2022'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+```
+
+
+# Load packages
+```{r message=FALSE}
+library(car)
+library(caret)
+library(ggplot2)
+library(leaps)
+library(MASS)
+library(corrgram)
+set.seed(987654321)
+```
+We will conduct a variety of diagnostic tests to ensure that all the key assumptions invoked in developing the model are met and these use the diagnostic outcomes to aid in developing a “good” structure for the regression model. In our context, “good” refers to satisfying the assumptions and enhancing the fit of the model. This process also enables us to move the final regression structure we employ closer to the “true” data generation process that creates the data we study.   
+
+# Diagnostics
+
+## Perfect model
+
+```{r}
+x = runif(500,1,100)
+y = 250 + x + rnorm(500,0,10)
+reg1 = lm(y~x)
+coef(reg1)
+plot(reg1$fitted.values,reg1$residuals)
+abline(h=0,col="red")
+```
+
+## Heteroskedasticity
+
+```{r}
+x = runif(500,1,20)
+y = 100+2*x + x*rnorm(500)
+reg1 = lm(y~x)
+coef(reg1)
+plot(reg1$fitted.values,reg1$residuals)
+abline(h=0,col="red")
+```
+
+### Examine cars data
+
+```{r}
+cars = read.csv("../../data/cars.csv")
+reg2 = lm(dist ~ speed, data=cars)
+plot(reg2$fitted.values,reg2$residuals)
+abline(h=0,col="red")
+summary(reg2)$r.squared
+coef(reg2)
+```
+
+### Detecting heteroskedasticity
+
+```{r}
+ncvTest(reg1)
+ncvTest(reg2)
+```
+
+### Box-Cox transformation
+
+* Box-Cox tranform the y variable in the first regression, rerun the model with the new y variable, and assess if the problem of heteroskedasticity is alleviated.
+```{r}
+y1 = predict(BoxCoxTrans(y),y) 
+reg3 = lm(y1~x) 
+plot(reg3$fitted.values,reg3$residuals) 
+abline(h=0,col="red") 
+ncvTest(reg3) 
+summary(reg3)$r.squared 
+```
+
+* Repeat for the cars data.
+
+```{r}
+cars$dist1 = predict(BoxCoxTrans(cars$dist),cars$dist)
+reg4 = lm(dist1~speed,data=cars)
+plot(reg4$fitted.values,reg4$residuals)
+abline(h=0,col="red")
+ncvTest(reg4)
+summary(reg4)$r.squared
+coef(reg4)
+```
+
+
+## Extreme Values
+Let us assess the impact of an extreme value on the coefficient estimates with an example. We will run two regressions and in the second one we introduce an extreme value for a single x observation.
+
+```{r}
+x = runif(500,1,100)
+y = 250 + x + rnorm(500,0,10)
+reg1 = lm(y~x)
+reg1$coefficients
+```
+
+
+```{r}
+x[499] = 860
+reg1 = lm(y~x)
+reg1$coefficients
+```
+
+### Detecting extreme values with Cook's Distance
+
+```{r}
+cd = cooks.distance(reg1)
+cutoff = 4/500
+plot(reg1,which=4,cook.levels = cutoff)
+abline(h=cutoff,col="red")
+```
+* Rerun the model by dropping the extreme values.
+
+```{r}
+reg2 = lm(y[-c(159,309,499)]~x[-c(159,309,499)])
+reg2$coefficients
+```
+#### Logistic regression example
+
+
+```{r}
+admit <- read.csv("../../data/admit.csv")
+breg1 = glm(admit~gre+gpa+rank,data=admit,family = "binomial")
+round(breg1$coefficients,3)
+z = cooks.distance(breg1)
+cutoff = 4/nrow(admit)
+plot(breg1,which=4,cook.levels = cutoff)
+abline(h=cutoff,col="red")
+
+```
+* Model without the extreme values
+
+```{r}
+breg1 = glm(admit~gre+gpa+rank,data=admit[-c(156,198,316),],family = "binomial")
+round(breg1$coefficients,3)
+```
+
+### Boxplot for extreme value detection
+
+```{r}
+ggplot(admit, aes(x=gre)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4)
+ggplot(admit, aes(x=gpa)) + 
+  geom_boxplot(outlier.colour="red", outlier.shape=8,
+                outlier.size=4)
+```
+
+
+## Multicollinearity
+
+We will introduce correlation between the two input variables through the variable lambda in the code below. You can experiment with the effects of multicollinearity by changing the values of lambda: 
+
+```{r}
+x1 = runif(500,1,10)
+lambda = 0.7
+x2 = (lambda*x1) + (1-lambda)*runif(500,1,10)
+cor(x1,x2)
+```
+
+### VIF
+
+```{r}
+y = 2*x1 + x2 + rnorm(500,0,10)
+reg1 = lm(y~x1+x2)
+round(reg1$coefficients,3)
+vif(reg1)
+```
+The following code illustrates the computation of VIF in our example.
+
+```{r}
+reg2 = lm(x1~x2)
+r2_1 = summary(reg2)$r.squared
+r2_1
+vif_x1 = 1/(1-r2_1)
+vif_x1
+```
+Low values of VIF below indicate that we do not have to worry about multicollinearity in the logistic regression example. 
+
+```{r}
+round(cor(admit[,-1]),3)
+vif(breg1)
+```
+
+
+# Regression Structure
+
+## Illustrative example
+```{r}
+x = runif(500,1,20)
+y = 100+2*x +0.5*x^2 + rnorm(500)
+reg1 = lm(y~x)
+summary(reg1)$r.squared
+reg1$coefficients
+plot(reg1$fitted.values,reg1$residuals)
+abline(h=0,col="red")
+```
+
+## Box-Tidwell tranformation
+
+```{r}
+boxTidwell(y~x)
+```
+
+A more comprehensive analysis with the MASchools.csv: 
+
+
+```{r}
+MASchools <- read.csv("../../data/MASchools.csv")
+df = MASchools[,c(13,7,8,9,11,15)]
+df1 = df[complete.cases(df),]
+reg1 = lm(score4~exptot+scratio+special+stratio+salary,data=df1)
+summary(reg1)$r.squared 
+ncvTest(reg1)
+```
+* Box-Tidwell test
+
+```{r warning=FALSE}
+boxTidwell(score4~exptot+scratio+special+stratio+salary,data=df1)
+```
+
+* Assess the non-linear model based on the test.
+
+```{r}
+reg2 = lm(score4~exptot+scratio+special+stratio+salary+I(stratio^4)+I(salary^6),data=df1)
+summary(reg2)$r.squared 
+ncvTest(reg2)
+```
+* Logistic regression example
+
+```{r warning=FALSE}
+breg1 = glm(admit~gre+gpa+rank,data=admit,family = "binomial")
+logodds = breg1$linear.predictors
+boxTidwell(logodds~gre+gpa+rank,data=admit)
+```
+
+## Interaction terms 
+
+
+```{r}
+x1 = runif(500,1,20)
+x2 = runif(500,1,20)
+y = x1+4*x2+0.5*x1*x2 + rnorm(500)
+reg1 = lm(y~x1+x2)
+reg1$coefficients
+```
+### ANOVA to detect important interactions
+
+```{r}
+res = step(reg1,~.^2)
+res$anova
+```
+
+* MASchools data
+
+```{r}
+reg2 = lm(score4~exptot+scratio+special+stratio+salary+I(stratio^4)+I(salary^6),data=df1)
+res = step(reg2,~.^2)
+res$anova
+```
+
+* Logistic regression example
+
+```{r}
+breg1 = glm(admit~gre+gpa+rank,data=admit,family = "binomial")
+res = step(breg1,~.^2)
+res$anova
+```
+## Variable Selection
+
+### Stepwise Regression
+
+```{r}
+x1 = runif(500,1,10)
+x2 = runif(500,1,10)
+y = 2*x1 + x2 + rnorm(500,0,10)
+reg1 = lm(y~x1+x2+x1:x2+I(x1^2)+I(x^3))
+step(reg1,direction="backward")$anova
+```
+
+* MASchools data
+
+```{r}
+reg1 = lm(score4 ~ exptot + scratio + special + stratio + I(stratio^4) + 
+    I(salary^6) + exptot:scratio + special:I(stratio^4) + scratio:special + 
+    exptot:I(stratio^4) + exptot:stratio + special:stratio + 
+    scratio:I(salary^6),data=df1)
+step(reg1,direction="both")$anova
+```
+
+* Logistic regression example
+
+```{r}
+breg1 = glm(admit~gre+gpa+rank+gre:gpa,data=admit,family = "binomial")
+step(breg1,direction="both")$anova
+```
+
+* Boston data
+
+```{r}
+Boston = read.csv("../../data/Boston.csv")
+reg1=lm(medv~.,data=Boston)
+step(reg1,direction="both")$anova
+```
+
+
+### Subsets regression
+
+* MASchools data
+
+```{r}
+bestsub1 =  regsubsets(score4 ~exptot + scratio + special+ I(stratio^4) + 
+    I(salary^6) + exptot:scratio + special:I(stratio^4) + scratio:special + 
+    exptot:I(stratio^4) + exptot:stratio + special:stratio + 
+    scratio:I(salary^6),data=df1,nvmax = 12)
+summary(bestsub1)
+names(summary(bestsub1))
+round(cbind( 
+    Cp     = summary(bestsub1)$cp,
+    r2     = summary(bestsub1)$rsq,
+    Adj_r2 = summary(bestsub1)$adjr2,
+    BIC    = summary(bestsub1)$bic
+),3)
+```
+
+* Boston data
+
+```{r}
+bestsub1 =  regsubsets(medv~.,data=Boston,nvmax = 14)
+summary(bestsub1)
+round(cbind( 
+    Cp     = summary(bestsub1)$cp,
+    r2     = summary(bestsub1)$rsq,
+    Adj_r2 = summary(bestsub1)$adjr2,
+    BIC    = summary(bestsub1)$bic
+),3)
+```
+

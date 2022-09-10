@@ -1,0 +1,276 @@
+---
+title: 'Chapter 10: Interactive Notebook for Students'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+
+# Load functions to compute p-value
+```{r message=FALSE}
+p_rtail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist>tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_ltail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x>tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist<tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_2tail = function(sampdist,tstat)
+  {
+hyp = mean(sampdist)  
+cutoff1 = hyp - abs(tstat-hyp)
+  cutoff2 = hyp + abs(tstat-hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<cutoff1 | df$temp.x>cutoff2
+  df1 = df[formula1,] 
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist<cutoff1 |  sampdist>cutoff2])/(length(sampdist))
+  return(pvalue)
+  }
+
+```
+
+
+# COVID-19 in Nursing Homes
+In this lesson, we will explore the practical case of investigating how COVID-19 infections affected nursing homes. Our study will be carried out through the practical application of some of the statistical tests studied in the previous chapters and it will demonstrate how we can transition from theory to practice. 
+
+For our analysis, we downloaded the data on infections as of July 14, 2020. The broad question we want to investigate is whether infections among staff is independent of infections among patients. 
+
+Let us take a peek at the data. 
+
+```{r}
+CA.COVID <- read.csv("../../data/CA COVID.csv")
+str(CA.COVID)
+```
+
+
+```{r}
+size = CA.COVID$AVAILABLE.BEDS
+patients_I = CA.COVID$CUMULATIVE.POSITIVE.RESIDENTS
+patients_D = CA.COVID$COVID.RELATED.RESIDENT.DEATHS
+staff_I = CA.COVID$CUMULATIVE.POSITIVE.HCW
+staff_D = CA.COVID$COVID.RELATED.HCW.DEATHS
+df = data.frame(size,patients_I, staff_I,patients_D,staff_D)
+head(df)
+
+```
+
+We are interested in the total number of patients and staff infected. 
+
+```{r}
+table(df$staff_D)
+```
+Most nursing homes fortunately did not experience any death of their staff and when they did it always was 10 or less deaths.   
+
+How many nursing homes had more than 0 infections amongst their staff? 
+
+```{r}
+nrow(df[!staff_I=="0",])
+```
+Hypothesis: 15% of nursing homes that had staff infections experienced death amongst their staff.
+```{r}
+prop.test(166,1201,p=0.15)
+```
+
+
+For the next analysis, we will take the following steps:
+
+1. Create a new dataframe including only the nursing homes that had staff infections. 
+2. Create a new variable staff_D_1 coded as none if there are no staff deaths and as some otherwise. 
+
+3. Create a new variable staff_I_1 coded as small if the value is <11 and as large otherwise.  
+
+4. Conduct a chi-square test with null hypothesis that the level of infections (small or large) is unrelated to the level of deaths (none or some). 
+
+```{r warning=FALSE}
+df1 = df[!staff_I=="0",]
+staff_D_1 = ifelse(df1$staff_D == 0, "none", "small" )
+staff_I_1 = ifelse(df1$staff_I == "<11", "small", "large" )
+chisq.test(staff_I_1,staff_D_1)
+```
+
+```{r}
+staff_I_2 = ifelse(df1$staff_I=="<11",5,df1$staff_I)
+staff_I_2 = as.numeric(staff_I_2)
+summary(staff_I_2)
+table(staff_D_1)
+```
+
+```{r}
+set.seed(87654321)
+f1 = function(){
+  s1 = sample(staff_I_2)
+  control1 = s1[1:1035]
+  treatment1 = s1[1036:length(s1)]
+  return(mean(treatment1)-mean(control1))
+}
+sampdist = replicate(10000, f1())
+plot(density(sampdist))
+```
+
+
+```{r}
+t1= mean(staff_I_2[staff_D_1=="none"])
+t2 = mean(staff_I_2[staff_D_1=="small"])
+tstat = t2-t1
+p_2tail(sampdist,tstat)
+
+```
+## Test with Median values
+
+```{r}
+set.seed(87654321)
+f1 = function(){
+  s1 = sample(staff_I_2)
+  control1 = s1[1:1035]
+  treatment1 = s1[1036:length(s1)]
+  return((median(treatment1)-median(control1)))
+}
+sampdist = replicate(10000, f1())
+
+t1= median(staff_I_2[staff_D_1=="none"])
+t2 = median(staff_I_2[staff_D_1=="small"])
+tstat = (t2-t1)
+p_2tail(sampdist,tstat)
+```
+## Patient and Staff Infections 
+
+```{r}
+staff_I_3 = ifelse(df$staff_I=="<11",5,df$staff_I)
+staff_I_3 = as.numeric(staff_I_3)
+patient_I_3 = ifelse(df$patients_I=="<11",5,df$patients_I)
+patient_I_3 = as.numeric(patient_I_3)
+ 
+summary(staff_I_3)
+summary(patient_I_3)
+
+```
+
+Are the number of infections reasonably normal?
+
+```{r}
+shapiro.test(staff_I_3)
+shapiro.test(patient_I_3)
+length(staff_I_3)
+length(patient_I_3)
+```
+
+Null hypothesis: the median value of the cumulative infections in a nursing home is the same for both the staff and the patients. The following code performs the nonparametric median test: 
+
+
+```{r}
+set.seed(87654321)
+n = length(patient_I_3)
+f1 = function(){
+  pool = c(staff_I_3,patient_I_3)
+  s1 = sample(pool)
+  control1 = s1[1:n]
+  treatment1 = s1[(n+1):(2*n)]
+  return(median(treatment1)-median(control1))
+}
+sampdist = replicate(10000, f1())
+plot(density(sampdist))
+
+tstat = median(patient_I_3)-median(staff_I_3)
+p_2tail(sampdist,tstat)
+
+
+```
+Repeat the above test with mean.
+
+```{r}
+set.seed(87654321)
+n = length(patient_I_3)
+f1 = function(){
+  pool = c(staff_I_3,patient_I_3)
+  s1 = sample(pool)
+  control1 = s1[1:n]
+  treatment1 = s1[(n+1):(2*n)]
+  return(mean(treatment1)-mean(control1))
+}
+sampdist = replicate(10000, f1())
+plot(density(sampdist))
+
+tstat = mean(patient_I_3)-mean(staff_I_3)
+p_2tail(sampdist,tstat)
+```
+
+As one final check, instead of replacing <11 with 5, we replace it with 1 to evaluate whether the results continue to hold: 
+
+```{r}
+staff_I_3 = ifelse(df$staff_I=="<11",10,df$staff_I)
+staff_I_3 = as.numeric(staff_I_3)
+patient_I_3 = ifelse(df$patients_I=="<11",10,df$patients_I)
+patient_I_3 = as.numeric(patient_I_3)
+
+```
+
+
+```{r}
+set.seed(87654321)
+n = length(patient_I_3)
+f1 = function(){
+  pool = c(staff_I_3,patient_I_3)
+  s1 = sample(pool)
+  control1 = s1[1:n]
+  treatment1 = s1[(n+1):(2*n)]
+  return(mean(treatment1)-mean(control1))
+}
+sampdist = replicate(10000, f1())
+
+tstat = mean(patient_I_3)-mean(staff_I_3)
+p_2tail(sampdist,tstat)
+```
+
+
+
+

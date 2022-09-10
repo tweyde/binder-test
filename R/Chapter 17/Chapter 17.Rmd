@@ -1,0 +1,416 @@
+---
+title: 'Chapter 17'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "2022"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+  word_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+```{r}
+library(caret)
+library(rattle)
+```
+
+```{r}
+print(names(wine))
+print(nrow(wine))
+```
+## Training and Test Data set creation
+
+
+```{r}
+index = createDataPartition(wine$Type,p = 0.6,list = F)
+train_wi <- wine[index,]
+test_wi <- wine[-index,]
+```
+
+## Models offered in the Caret package
+
+```{r}
+# All the models supported by the caret package
+modelnames <- paste(names(getModelInfo()), collapse=',  ')
+modelnames
+modelLookup(list('rpart'))
+```
+```{r}
+
+```
+
+
+
+
+## Run DT algorithm
+
+```{r}
+tree = train(Type ~ ., data=train_wi, method='rpart')
+fitted <- predict(tree)
+table(train_wi$Type,fitted)
+tree
+plot(tree$finalModel)
+text(tree$finalModel)
+```
+
+Fancier tree graph
+```{r}
+library(rattle)
+fancyRpartPlot(tree$finalModel)
+```
+
+
+Plotting the model shows how the various iterations of hyperparameter search performed.
+
+```{r}
+plot(tree)
+```
+
+Predict on the test data.
+
+```{r}
+table(test_wi$Type,predicted)
+
+```
+
+```{r}
+# Performance on Test Data
+confusionMatrix(reference = test_wi$Type, data = predicted, mode='everything', positive='MM')
+# Performance on Training Data
+confusionMatrix(reference = train_wi$Type, data = fitted, mode='everything', positive='MM')
+
+```
+
+## Run KNN algorithm
+
+```{r}
+modelLookup('knn')
+```
+
+```{r}
+model_knn= train(Type ~ ., data=train_wi, method='knn')
+model_knn
+plot(model_knn)
+```
+
+
+```{r}
+fitted <- predict(model_knn)
+predicted <- predict(model_knn, test_wi)
+# Performance on Test Data
+confusionMatrix(reference = test_wi$Type, data = predicted)
+# Performance on Training Data
+confusionMatrix(reference = train_wi$Type, data = fitted)
+
+```
+
+To get model accuracy
+```{r}
+paste("KNN Test Accuracy = ",confusionMatrix(reference = test_wi$Type, data = predicted)$overall[1])
+
+predicted = predict(tree,newdata = test_wi)
+paste("DT Test Accuracy = ",confusionMatrix(reference = test_wi$Type, data = predicted)$overall[1])
+
+
+
+```
+# Cross-Validation
+
+10-fold
+```{r}
+model_knn_cv_10= train(Type ~ ., data=wine, method='knn',metric="Accuracy",
+                    trControl=trainControl(method = 'cv',number = 10))
+paste("Mean of accuracy 10 fold = ",mean(model_knn_cv_10$resample$Accuracy))
+paste("sd of accuracy 10 fold = ",sd(model_knn_cv_10$resample$Accuracy))
+```
+20-fold
+
+```{r}
+model_knn_cv_20= train(Type ~ ., data=wine, method='knn',metric="Accuracy",
+                    trControl=trainControl(method = 'cv',number = 20))
+paste("Mean of accuracy 20 fold = ",mean(model_knn_cv_20$resample$Accuracy))
+paste("sd of accuracy 20 fold = ",sd(model_knn_cv_20$resample$Accuracy))
+
+```
+
+LOOCV
+```{r}
+model_knn_LOOCV= train(Type ~ ., data=wine, method='knn',metric="Accuracy",
+                    trControl=trainControl(method = 'cv',number = nrow(wine)))
+paste("Mean of accuracy LOOCV = ",mean(model_knn_LOOCV$resample$Accuracy,na.rm = T))
+paste("sd of accuracy LOOCV = ",sd(model_knn_LOOCV$resample$Accuracy,na.rm = T))
+```
+Stratified Sampling
+
+```{r}
+folds = createMultiFolds(wine$Type, k = 10)
+model_knn_strat= train(Type ~ ., data=wine, method='knn',metric="Accuracy",
+                    trControl=trainControl(index = folds))
+paste("Mean for stratified sample = ",mean(model_knn_strat$resample$Accuracy))
+paste("sde for stratified sample = ",sd(model_knn_strat$resample$Accuracy))
+
+```
+## Signifance of Model Differences
+
+Compare 20-fold DT model with KNN model
+```{r}
+model_dt_cv_20= train(Type ~ ., data=wine, method='rpart',metric="Accuracy",
+                    trControl=trainControl(method = 'cv',number = 20))
+paste("Mean accuracy of KNN= ",mean(model_knn_cv_20$resample$Accuracy))
+paste("Mean accuracy of DT = ",mean(model_dt_cv_20$resample$Accuracy))
+wilcox.test(model_dt_cv_20$resample$Accuracy,model_knn_cv_20$resample$Accuracy)
+```
+
+Compare Stratified CV DT model with KNN model
+
+```{r}
+folds = createMultiFolds(wine$Type, k = 20)
+model_knn_strat= train(Type ~ ., data=wine, method='knn',metric="Accuracy",
+                    trControl=trainControl(index = folds))
+model_dt_strat= train(Type ~ ., data=wine, method='rpart',metric="Accuracy",
+                    trControl=trainControl(index = folds))
+paste("Mean accuracy KNN = ",mean(model_knn_strat$resample$Accuracy))
+paste("Mean accuracy DT = ",mean(model_dt_strat$resample$Accuracy))
+paste("sd accuracy KNN = ",sd(model_knn_strat$resample$Accuracy))
+paste("sd accuracy DT = ",sd(model_dt_strat$resample$Accuracy))
+wilcox.test(model_knn_strat$resample$Accuracy,model_dt_strat$resample$Accuracy)
+```
+
+# Hyperparameter tuning
+
+DT
+```{r}
+folds = createMultiFolds(train_wi$Type, k = 20)
+model_dt_strat_fold= train(Type ~ ., data=train_wi, method='rpart2',metric="Accuracy",
+                    trControl=trainControl(index = folds),
+                    tuneGrid = expand.grid(maxdepth = 1:10))
+folds = createMultiFolds(train_wi$Type, k = 2)
+model_dt_strat_nofold= train(Type ~ ., data=train_wi, method='rpart2',metric="Accuracy",
+                    trControl=trainControl(index = folds),
+                    tuneGrid = expand.grid(maxdepth = 1:10))
+
+```
+
+Plot
+
+```{r}
+df1 = model_dt_strat_nofold$results[,c(1,2)]
+df1$foldtype = as.factor("Training")
+df2 = model_dt_strat_fold$results[,c(1,2)]
+df2$foldtype = as.factor("Cross-validation")
+df = rbind(df1,df2)
+ggplot(data=df,aes(x=maxdepth,y=Accuracy,color=foldtype))+
+  geom_line()
+
+```
+
+See and plot the final tree 
+```{r}
+model_dt_strat_fold$finalModel
+fancyRpartPlot(model_dt_strat_fold$finalModel,main = "Decision Tree",sub = "")
+```
+
+## Estimating the Model Performance
+
+For 2 folds
+```{r}
+df = data.frame()
+folds = createMultiFolds(train_wi$Type, k = 2)
+for (md in 1:10){
+model_dt_strat_nofold= train(Type ~ ., data=train_wi, method='rpart2',metric="Accuracy",trControl=trainControl(index = folds),
+                    tuneGrid = expand.grid(maxdepth = md))
+df = rbind(df,c(md,"Training",model_dt_strat_nofold$results$Accuracy))
+pred = predict(model_dt_strat_nofold,newdata = test_wi)
+t1 = table(test_wi$Type,pred)
+accu = sum(t1[1,1]+t1[2,2]+t1[3,3])/nrow(test_wi)
+df = rbind(df,c(md,"Validation",accu))
+}
+colnames(df) = c("maxdepth","foldtype","Accuracy")
+
+```
+
+
+```{r}
+df$maxdepth = as.numeric(df$maxdepth)
+df$Accuracy = as.numeric(df$Accuracy)
+ggplot(data=df,aes(x=maxdepth,y=Accuracy,color=foldtype))+
+  geom_line()
+```
+For 10 folds
+```{r}
+
+df = data.frame()
+folds = createMultiFolds(train_wi$Type, k = 20)
+for (md in 1:10){
+  model_dt_strat_fold= train(Type ~ ., data=train_wi,  method='rpart2',metric="Accuracy",trControl=trainControl(index = folds),
+                    tuneGrid = expand.grid(maxdepth = md))
+df = rbind(df,c(md,"Training",model_dt_strat_fold$results$Accuracy))
+pred = predict(model_dt_strat_fold,newdata = test_wi)
+t1 = table(test_wi$Type,pred)
+accu = sum(t1[1,1]+t1[2,2]+t1[3,3])/nrow(test_wi)
+df = rbind(df,c(md,"Validation",accu))
+}
+colnames(df) = c("maxdepth","foldtype","Accuracy")
+
+```
+
+```{r}
+df$maxdepth = as.numeric(df$maxdepth)
+df$Accuracy = as.numeric(df$Accuracy)
+
+ggplot(data=df,aes(x=maxdepth,y=Accuracy,color=foldtype))+
+  geom_line()
+```
+# Final Test of Performance
+For 2 folds
+
+```{r}
+folds = createMultiFolds(train_wi$Type, k = 2)
+model_dt_strat_nofold= train(Type ~ ., data=train_wi, method='rpart2',metric="Accuracy",trControl=trainControl(index = folds),
+                    tuneGrid = expand.grid(maxdepth = 3))
+pred = predict(model_dt_strat_nofold,newdata = test_wi)
+t1 = table(test_wi$Type,pred)
+accu = sum(t1[1,1]+t1[2,2]+t1[3,3])/nrow(test_wi)
+paste("Accuracy = ", accu)
+```
+
+
+
+```{r}
+folds = createMultiFolds(wine$Type, k = 20)
+model_dt_strat_fold= train(Type ~ ., data=wine,  method='rpart2',metric="Accuracy",trControl=trainControl(index = folds),
+                    tuneGrid = expand.grid(maxdepth = 3))
+paste("CV Accuracy - Mean = ",mean(model_dt_strat_fold$resample$Accuracy))
+paste("CV Accuracy - sd = ",sd(model_dt_strat_fold$resample$Accuracy))
+```
+
+# Use Case
+
+Read the data
+
+```{r}
+df <- read.csv("C:/Users/rgopal/Google Drive/Maya R/googleplaystore.csv",stringsAsFactors = T)
+library(stringr)
+```
+
+Look at the structure
+```{r}
+str(df)
+```
+
+## Data Wrangling
+
+### Convert Price to numeric
+
+```{r}
+df$Price=str_replace(df$Price,",","")
+df$Price = str_replace(df$Price,"\\$","")
+df$Price = as.numeric(df$Price)
+df$Price = as.numeric(str_replace_na(df$Price,0))
+
+```
+
+
+### Convert Rating
+```{r}
+x = ifelse(is.nan(df$Rating),0,df$Rating)
+brakepoints = quantile(x,probs= c(0,0.33,0.67,1))
+x = cut(x,breaks = brakepoints,labels = c("lowest","middle","highest"))
+x = ifelse(is.na(x),"1",x)
+df$Rating = x
+```
+
+
+### Convert Reviews to Numeric
+```{r}
+df$Reviews = as.numeric(df$Reviews)
+
+```
+
+### Convert Installs
+
+```{r}
+df$Installs = as.numeric(df$Installs)
+
+```
+
+### Convert size
+```{r}
+df$Size = as.numeric(df$Size)
+```
+
+
+
+Remove extraenous variables
+
+```{r}
+df = df[-c(1,11,12,13)]
+str(df)
+```
+
+### Final check for missing values
+
+```{r}
+table(complete.cases(df))
+```
+
+### DT - Full
+
+```{r}
+library(caret)
+library(rpart)
+dtmodel <- train(Rating ~ ., method = "rpart", data = df,
+ trControl=trainControl(method = 'cv',number = 20))                                  
+fancyRpartPlot(dtmodel$finalModel,main = "Decision Tree",sub = "")       
+```
+
+
+### For Family
+```{r}
+dtmodel_family <- train(Rating ~ ., method = "rpart", data = df[df$Category=="FAMILY",],
+ trControl=trainControl(method = 'cv',number = 20))  
+fancyRpartPlot(dtmodel_family$finalModel,main = "Decision Tree",sub = "")
+
+```
+```{r}
+mean(dtmodel$resample$Accuracy)
+```
+```{r}
+dtmodel <- train(Rating ~ ., method = "rpart", data = df,
+ trControl=trainControl(method = 'cv',number = 10)) 
+paste("Mean of accuracy for 10 fold validation = ",mean(dtmodel$results$Accuracy))
+paste("sd of accuracy for 10 fold validation = ",sd(dtmodel$results$Accuracy))
+dtmodel <- train(Rating ~ ., method = "rpart", data = df,
+ trControl=trainControl(method = 'cv',number = 20)) 
+paste("Mean of accuracy for 20 fold validation = ",mean(dtmodel$results$Accuracy))
+paste("sd of accuracy for 20 fold validation = ",sd(dtmodel$results$Accuracy))
+```
+
+
+
+
+
+
+```{r}
+fitted <- predict(model_knn_cv_10)
+predicted <- predict(model_knn_cv_10, test_wi)
+
+# Performance on Test Data
+perf_test = confusionMatrix(reference = test_wi$Type, data = predicted, mode='everything')
+# Performance on Training Data
+perf_train = confusionMatrix(reference = train_wi$Type, data = fitted, mode='everything')
+
+
+```
+

@@ -1,0 +1,496 @@
+---
+title: 'Use Case Coding in R'
+author: "Ram Gopal"
+date: "Summer 2022"
+output:
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Chapter 1
+```{r}
+df_supermarket <- read.csv("C:/Users/rgopal/Google Drive/Maya R/50_SupermarketBranches.csv")
+head(df_supermarket)
+print(summary(df_supermarket))
+```
+```{r}
+plot(df_supermarket$Promotion.Spend,df_supermarket$Profit,
+     main = 'Relationship between Promotion Spend and profit 
+     (each point is a product line)',
+     xlab = 'Promotion Spend',
+     ylab = 'Profit')
+    
+```
+```{r}
+plot(df_supermarket$Advertisement.Spend,df_supermarket$Profit,
+     main = 'Relationship between Advertisement Spend and profit 
+     (each point is a product line)',
+     xlab = 'Advertisement Spend',
+     ylab = 'Profit')
+```
+```{r}
+cor(df_supermarket$Profit,df_supermarket[-c(4,5)])
+```
+# Chapter 2
+
+## Calculate financial analytics  - formulas
+
+df.insert(df.shape[1],'EBITDA_margin', data['EBITDA ($ millions)']/data['Revenues ($ millions)'])  
+
+df.insert(df.shape[1],'Net_Margin', data['Net Income ( $ millions)']/data['Revenues ($ millions)'])  
+
+df.insert(df.shape[1],'Debt_EV', data['Total Debt (including leases) ($ millions)']/data['Enteprise Value ($ millions)'])  
+
+df.insert(df.shape[1],'EBITDA_EV', data['EBITDA ($ millions)']/data['Enteprise Value ($ millions)'])  
+
+df.insert(df.shape[1],'EBITDA Multiple', data['EBITDA ($ millions)']/data['Enteprise Value ($ millions)'])  
+
+   
+
+key_dis = ['EBITDA Multiple','EBITDA_margin','Net_Margin','Debt_EV','EBITDA_EV','Gross Profit ($ millions)']  
+
+df_key_dis = df[key_dis] 
+
+```{r}
+valuation_multiples <- read_excel("valuation multiples.xlsx")
+df = valuation_multiples
+df$EBITDA_margin = df$`EBITDA ($ millions)`/df$`Revenues ($ millions)`
+df$Net_Margin = df$`Net Income ( $ millions)`/df$`Revenues ($ millions)`
+df$Debt_EV = df$`Total Debt (including leases) ($ millions)`/df$`Enteprise Value ($ millions)`
+df$EBITDA_EV = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)`
+df$EBITDA_multiple = df$`EBITDA ($ millions)`/df$`Enteprise Value ($ millions)`
+
+
+```
+
+
+```{r}
+df = df[order(df$EBITDA_multiple),]
+```
+
+
+```{r}
+library(ggplot2)
+```
+
+
+
+
+```{r}
+#library(readxl)
+#valuation_multiples <- read_excel("valuation multiples.xlsx")
+ggplot(df,aes(x =`Industry  Name`, y = EBITDA_multiple)) + 
+  geom_col(size = 1) +
+ theme(axis.text.x = element_text(angle = 90))
+   
+
+
+```
+```{r}
+ggplot(df,aes(x = EBITDA_multiple)) + 
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) + 
+  theme_light() 
+```
+
+```{r}
+ggplot(df,aes(x =EBITDA_multiple, y = `EBITDA ($ millions)`),size=`Market Cap ($ millions)`) + 
+  geom_point(col="magenta")
+  
+
+
+```
+
+```{r}
+ggplot(df,aes(x =EBITDA_multiple, y = `EBITDA ($ millions)`)) + 
+  geom_point(col="magenta")+
+   geom_smooth()
+```
+
+```{r}
+clusters = hclust(dist(df[, c(1,3,6,9,13)]),method = "ward.D")
+plot(clusters,labels = df$`Industry  Name`)
+
+
+```
+
+
+# Chapter 3
+
+```{r}
+# library(readxl)
+df = read_excel("supermarket_sales.xlsx")
+```
+
+
+```{r}
+head(df[df$Gender == 'Female',])
+```
+
+```{r}
+df_female = df[df$Gender == 'Female',]
+df_female = df_female[order(df_female$Quantity,decreasing = T),]
+```
+
+
+```{r}
+
+df_female$hour = format(as.POSIXct(df_female$Time, format="%Y-%m-%d %H:%M"), format="%H")
+df_female$hour = as.numeric(df_female$hour)
+breaks <- c(0,2,4,6,8,10,12,14,16,18,20,22)
+tags <- c("[0-2)","[2-4)", "[4-6)", "[6-8)", "[8-10)", "[10-12)","[12-14)", "[14-16)","[16-18)", "[18-20)","[20-22)")
+
+df_female$time_bin <- cut(df_female$hour, 
+                  breaks=breaks, 
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=tags)
+
+
+```
+
+
+```{r}
+ggplot(df_female,aes(x =time_bin, y = Quantity)) + 
+  geom_col(size = 1)
+```
+
+# Chapter 5
+
+```{r}
+hist(supermarket_sales$Total,main = "Distribution of Total",
+     xlab = "Total")
+```
+
+```{r}
+hist(supermarket_sales$Quantity,main = "Distribution of Quantity",
+     xlab = "Quantity")
+```
+
+```{r}
+ggplot(supermarket_sales,aes(x =City, y = Total)) + 
+  geom_col(size = 1)+
+          coord_flip()
+```
+
+
+```{r}
+ggplot(supermarket_sales,aes(x = `Product line`)) + 
+  geom_bar(aes(fill = Gender),position = "dodge") + 
+  coord_flip()
+
+
+```
+
+# Chapter 6
+
+```{r}
+df1 = df[c(13:17)]
+```
+
+
+
+```{r}
+#library(corrplot)
+#corrplot(cor(df1))
+library(corrgram)
+corrgram(df1,upper.panel = panel.pts,lower.panel= panel.pie,order = T )
+
+```
+
+```{r}
+heatmap(cor(df1),Rowv = NA, Colv = NA)
+
+```
+
+
+# Chapter 7
+
+```{r}
+df = read_excel("listings - wrangled.xlsx")
+```
+
+```{r}
+ggplot(df,aes(y = property_type ,x=price)) + 
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) + 
+  theme_light() 
+
+```
+
+```{r}
+hist(df$price[df$price<1000],breaks=50,
+     main = "AirBnB Boston Distribution of Apartment Prices",
+     xlab = "Price")
+```
+
+```{r}
+conf_int = function(sampdist,conlevel=0.95) 
+
+{ 
+
+  left_v = (1 - conlevel)/2 
+
+  right_v = 1 - left_v 
+
+  q1 = quantile(sampdist,c(left_v,right_v)) 
+
+  plot(density(sampdist)) 
+
+  abline(v = q1, col = "red") 
+
+  output = paste0("[",q1[1],",",q1[2],"]") 
+
+  return(output) 
+
+} 
+```
+
+
+
+
+
+```{r}
+#plot(density(df$price[df$price<1000]))
+conf_int(df$price[df$price<1000])
+
+```
+
+
+```{r}
+qvalues = quantile(df[df$price<1000,]$price,c(0.05/2,1-0.05/2))
+ggplot(df[df$price<1000,],aes(x=price)) + 
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) + 
+  theme_light() +
+   geom_vline(xintercept=qvalues,col="red")
+```
+
+# Chapter 8
+
+
+```{r}
+df <- read_excel("sensor-fault-detection.xlsx")
+hist(df$Value,breaks=50,
+     main = "Schneider-Electric: Distribution of Sensor Readings, Monitoring for Faults and Cyber Attacks", xlab="Value")
+```
+
+```{r}
+p_2tail = function(sampdist,tstat)
+  {
+hyp = mean(sampdist)  
+cutoff1 = hyp - abs(tstat-hyp)
+  cutoff2 = hyp + abs(tstat-hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<cutoff1 | df$temp.x>cutoff2
+  df1 = df[formula1,] 
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist<cutoff1 |  sampdist>cutoff2])/(length(sampdist))
+  return(pvalue)
+  }
+```
+
+
+```{r}
+p_2tail(df$Value,13)
+```
+
+# Chapter 9
+
+```{r}
+df = read_excel("WA_Marketing-Campaign.xlsx")
+
+```
+
+```{r}
+store_locs = c(920, 217, 2, 3, 302, 203)
+df_week1 = df[df$week==1 & df$LocationID %in% store_locs,]
+```
+
+```{r}
+hist(df_week1$SalesInThousands,breaks=4,
+     main="Fast Food Promotion: frequency distribution")
+```
+
+```{r}
+bootsampdist = replicate(10000, mean(sample(df_week1$SalesInThousands, replace = T))) 
+q2 = quantile(bootsampdist, c(.05/2,1-(.05/2))) 
+plot(density(bootsampdist)) 
+abline(v = q2, col = "red") 
+
+paste("95% Confidence interval = [", round(q2,2)[1],", ",round(q2,2)[2],"]") 
+```
+
+
+```{r}
+aggregate(df_week1$SalesInThousands,list(df_week1$Promotion),median)
+
+```
+
+
+
+```{r}
+df1 = df[df$week==1,]
+bootsampdist = replicate(10000, mean(sample(df1$SalesInThousands, replace = T))) 
+q2 = quantile(bootsampdist, c(.05/2,1-(.05/2))) 
+plot(density(bootsampdist)) 
+abline(v = q2, col = "red") 
+
+paste("95% Confidence interval = [", round(q2,2)[1],", ",round(q2,2)[2],"]") 
+```
+
+
+
+
+```{r}
+df1 = df[df$week==1,]
+aggregate(df1$SalesInThousands,list(df1$Promotion),median)
+```
+
+
+
+```{r}
+bootsampdist = replicate(10000, mean(sample(df$SalesInThousands, replace = T))) 
+q2 = quantile(bootsampdist, c(.05/2,1-(.05/2))) 
+plot(density(bootsampdist)) 
+abline(v = q2, col = "red") 
+
+paste("95% Confidence interval = [", round(q2,2)[1],", ",round(q2,2)[2],"]")
+```
+
+
+```{r}
+aggregate(df$SalesInThousands,list(df$Promotion),median)
+```
+
+
+```{r}
+ggplot(df,aes(x = as.factor(Promotion) ,y=SalesInThousands)) + 
+  geom_boxplot(col = "violet", fill = "lightblue", size = 1) + 
+  theme_light() 
+```
+
+
+# Chapter 12
+
+```{r}
+df = read.csv("50_Startups.csv")
+```
+
+```{r}
+startups = sample(1:nrow(df),3)
+```
+
+```{r}
+df_test = df[startups,]
+df_train =df[-startups,]
+```
+
+
+```{r}
+reg1 = lm(Profit ~ .-State, data=df_train)
+summary(reg1)
+```
+
+
+```{r}
+plot(df_train$R.D.Spend,df_train$Profit,col="red",pch=16,xlab="R&D Spend",ylab="profit")
+points(df_train$R.D.Spend,reg1$fitted.values,col="blue",pch=16)
+#segments(df_train$R.D.Spend,df_train$Profit,df_train$R.D.Spend,reg1$fitted.values)
+```
+
+
+```{r}
+df_test$prediction = predict.lm(reg1,df_test)
+df_test
+```
+
+```{r}
+plot(df_train$R.D.Spend,df_train$Profit,col="red",pch=16,xlab="R&D Spend",ylab="profit")
+points(df_train$R.D.Spend,reg1$fitted.values,col="blue",pch=16)
+#segments(df_train$R.D.Spend,df_train$Profit,df_train$R.D.Spend,reg1$fitted.values)
+points(df_test$R.D.Spend,df_test$prediction,col="yellow",pch=)
+points(df_test$R.D.Spend,df_test$Profit,col="green",pch=16)
+#segments(df_test$R.D.Spend,df_test$Profit,df_test$R.D.Spend,df_test$prediction,lwd = 5)
+abline(v = df_test$R.D.Spend)
+
+```
+
+
+
+
+
+```{r}
+library(caret)
+dummy = dummyVars(" ~ .", data=df)
+final_df = data.frame(predict(dummy, newdata=df))
+head(final_df)
+
+```
+
+
+
+# Chapter 14
+```{r}
+cor(df_train[1:3])
+corrgram(df_test[1:3],upper.panel = panel.pie)
+```
+
+```{r}
+df_train_dif = df_train
+df_train_dif$Marketing.Spend = df_train_dif$Marketing.Spend - df_train_dif$R.D.Spend
+cor(df_train_dif[1:3])
+```
+
+```{r}
+reg1 = lm(Profit ~ .-State, data=df_train_dif)
+summary(reg1)
+```
+
+```{r}
+plot(df_train_dif$R.D.Spend,df_train_dif$Profit,col="red",pch=16,xlab="R&D Spend",ylab="profit")
+points(df_train_dif$R.D.Spend,reg1$fitted.values,col="blue",pch=16)
+```
+
+
+```{r}
+plot(reg1$fitted.values,reg1$residuals,
+     xlab="Predicted Profit",
+     ylab = "Residual")
+abline(h=0,col="red")
+```
+
+```{r}
+plot(density(reg1$residuals))
+shapiro.test(reg1$residuals)
+```
+
+```{r}
+library(leaps)
+bestsub1 =  regsubsets(Profit ~ . - State, data = df_train_dif,nvmax = 12)
+summary(bestsub1)
+names(summary(bestsub1))
+round(cbind( 
+    Cp     = summary(bestsub1)$cp,
+    r2     = summary(bestsub1)$rsq,
+    Adj_r2 = summary(bestsub1)$adjr2,
+    BIC    = summary(bestsub1)$bic
+),3)
+
+```
+
+
+```{r}
+reg2 = lm(Profit ~ R.D.Spend+Marketing.Spend, data=df_train_dif)
+summary(reg2)
+```

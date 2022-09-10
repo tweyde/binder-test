@@ -1,0 +1,82 @@
+---
+title: 'Chapter 1: Use Case Notebook for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+# Use case: Descriptive Statistics and Correlations to Determine US Supermarket Sales Strategy 
+Descriptive statistics and correlations help us understand more about business problems, and can improve our decision making. For instance, a supermarket chain needs to maximize sales at the lowest marketing cost, determining whether in-store promotion or out-of-store advertising is most effective in driving profits by product line. Should they invest more in Promotions or Advertising? 
+
+```{r}
+df_supermarket <- read.csv("../../data/50_SupermarketBranches.csv")
+head(df_supermarket)
+print(summary(df_supermarket))
+```
+
+There are several interesting points to note about our marketing approach we can see from the descriptive statistics immediately. The range of spend on Advertising ($0 to $ 165,349) is wider than on Promotion ($51,283 to $182,645) across product lines, in some cases nothing is spent on advertising. All lines are promoted, not all are advertised. Mean promotion spend ($121,344) is considerably more than mean advertising spend ($73,721).   
+
+ 
+Now we can examine the correlations between Advertising Spend and Profits and Promotion Spend and Profits. We can use charts to examine the correlations. If there is no relationship, we will see a cloud of dots with no form:     
+
+```{r}
+plot(df_supermarket$Promotion.Spend,df_supermarket$Profit,
+     main = 'Relationship between Promotion Spend and profit 
+     (each point is a product line)',
+     xlab = 'Promotion Spend',
+     ylab = 'Profit')
+    
+```
+
+There is no apparent relationship between Promotion Spend and Profits.  In this case it appears that every extra dollar we spend on Promoting a product line does not contribute to profits from that line. We now examine Advertisement Spend: 
+
+```{r}
+plot(df_supermarket$Advertisement.Spend,df_supermarket$Profit,
+     main = 'Relationship between Advertisement Spend and profit 
+     (each point is a product line)',
+     xlab = 'Advertisement Spend',
+     ylab = 'Profit')
+```
+
+Advertisement Spend is quite different and shows a strong relationship between profits and out-of-store advertising spending.  The dots follow an upwards sloping line, described as a linear relationship with a positive slope. This means that with every product line where more has been spent on advertising, more profit has resulted. Where less has been spent on advertising less profit has resulted.  The amount of US$s in profit we gain from and extra 1 US$ spent on advertising is described by the slope of the line. We can now calculate the correlation coefficients.
+
+
+```{r}
+cor(df_supermarket$Profit,df_supermarket[-c(4,5)])
+```
+The correlation coefficients show what we already know, that Advertisement Spend has a high correlation (0.97), while Promotion Spend has a low correlation (0.20). While correlation is not necessarily causation, from this analysis we can clearly see that Advertising has the stronger relationship with profits. It would make sense to review possible increases in Advertising spend by product line as a priority, and to review reductions in promotion spending too. 
+
+

@@ -1,0 +1,127 @@
+---
+title: "Chapter 17 - Use Case"
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: '2022'
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(caret)
+library(rattle)
+library(stringr)
+```
+
+
+# Use Case - Decision Trees to Model App Ratings
+This is likely to be the most complicated use case thus far in the book. Students may struggle a bit, but it provides opportunities to extend this to an involved assignment or a course project. It is useful to impress on the students the importance of data preparation. This use case provides a nice "real-world" data set that will consume significant effort to get the data ready for analysis. 
+
+## Read the data
+* Remind students to read the textual data as strings.
+
+```{r}
+df <- read.csv("C:/Users/rgopal/Google Drive/Maya R/googleplaystore.csv",stringsAsFactors = T)
+```
+
+*Quick peek of the data. Illustrates that a number of inherently numeric variables have been read as categorical which need to be fixed.
+```{r}
+str(df)
+```
+
+## Data Wrangling
+
+### Convert Price to numeric
+* This is a good opportunity to discuss string manipulation with stringr package.
+```{r}
+df$Price=str_replace(df$Price,",","")
+df$Price = str_replace(df$Price,"\\$","")
+df$Price = as.numeric(df$Price)
+df$Price = as.numeric(str_replace_na(df$Price,0))
+
+```
+
+### Convert Rating
+* To a 3 level factor variable.
+```{r}
+x = ifelse(is.nan(df$Rating),0,df$Rating)
+brakepoints = quantile(x,probs= c(0,0.33,0.67,1))
+x = cut(x,breaks = brakepoints,labels = c("lowest","middle","highest"))
+x = ifelse(is.na(x),"1",x)
+df$Rating = x
+```
+
+### Convert Reviews, Installs, and Size to numeric
+```{r}
+df$Reviews = as.numeric(df$Reviews)
+df$Installs = as.numeric(df$Installs)
+df$Size = as.numeric(df$Size)
+```
+
+### Remove extraneous variables unlikely to be useful for prediction
+
+```{r}
+df = df[-c(1,11,12,13)]
+str(df)
+```
+
+### Final check for missing values
+
+```{r}
+table(complete.cases(df))
+```
+
+## Building a Decision Tree model
+* fancyRpartPlot function from the rattle package is a good one to draw the tree.
+
+```{r}
+library(caret)
+library(rpart)
+dtmodel <- train(Rating ~ ., method = "rpart", data = df,
+ trControl=trainControl(method = 'cv',number = 20))                                  
+fancyRpartPlot(dtmodel$finalModel,main = "Decision Tree",sub = "")       
+```
+
+
+## Building a Decision Tree model for the FAMILY Category
+```{r}
+dtmodel_family <- train(Rating ~ ., method = "rpart", data = df[df$Category=="FAMILY",],
+ trControl=trainControl(method = 'cv',number = 20))  
+fancyRpartPlot(dtmodel_family$finalModel,main = "Decision Tree",sub = "")
+```
+
+## Assessing Accuracy and Stability of the model
+* Overall accuracy
+```{r}
+mean(dtmodel$resample$Accuracy)
+```
+* Performance across two validation setups.
+```{r}
+dtmodel <- train(Rating ~ ., method = "rpart", data = df,
+ trControl=trainControl(method = 'cv',number = 10)) 
+paste("Mean of accuracy for 10 fold validation = ",mean(dtmodel$results$Accuracy))
+paste("sd of accuracy for 10 fold validation = ",sd(dtmodel$results$Accuracy))
+dtmodel <- train(Rating ~ ., method = "rpart", data = df,
+ trControl=trainControl(method = 'cv',number = 20)) 
+paste("Mean of accuracy for 20 fold validation = ",mean(dtmodel$results$Accuracy))
+paste("sd of accuracy for 20 fold validation = ",sd(dtmodel$results$Accuracy))
+```
+
+## Remarks
+There are a number of opportunities to extend the use case. Various models can be assessed for model selection and other approaches to data wrangling can be explored as well.
+
+

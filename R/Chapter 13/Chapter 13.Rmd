@@ -1,0 +1,284 @@
+---
+title: 'Chapter 13: General Linear Models'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 20202"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+  html_document:
+    theme: united
+    highlight: tango
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+---
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+
+```
+
+
+
+# Load packages
+```{r message=FALSE}
+library(bbmle)
+set.seed(987654321)
+```
+
+# Binary Outcomes
+
+## Baseline Model
+
+The baseline model that we want to estimate is shown in the following 
+figure. 
+
+![](estpic11.png)
+
+
+```{r warning=FALSE}
+admit <- read.csv("../../data/admit.csv")
+LLbinary = function(pi){
+  p = ifelse(admit$admit == 1, pi, 1 - pi)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+res1 = mle2(minuslogl = LLbinary, start = list(pi= .5))
+summary(res1)
+```
+
+
+Now suppose we think that the probability of admission is determined by the variables
+gre, gpa, and rank. The data generation process is depicted in the following figure. 
+
+![](estpic12.png)
+
+Let us denote
+
+$$X = \beta_0 + \beta_1 \times gre + \beta_2 \times gpa + \beta_3 \times rank$$
+
+What should the function be that links X with $\pi$? The issue here is 
+that the two terms have different domains. The domain for $\pi$ is $[0,1]$. The 
+domain for X on the other hand is $(-\infty,\infty)$. For the function $f$ that 
+relates X to $\pi$, we need to be able to match the two domains. The function $f$ 
+is called the **link** function. 
+
+## Logistic Regression
+
+The following table illustrates the creation of 
+one possible link function. 
+
+Variable|Domain
+--------|------
+X|$[-\infty,\infty]$
+$e^X$|$[0,\infty]$
+$\frac{e^X}{1 + e^X}$|[0,1]
+---------------------------
+
+The specification linking $\pi$ with X is the following. 
+
+$$\pi = \frac{e^X}{1 + e^X}$$
+
+Rearranging this gives us what is called the **logistic regression specification**.
+
+$$ln(\frac{\pi}{1-\pi}) = X = \beta_0 + \beta_1 \times gre + \beta_2 \times gpa + \beta_3 \times rank$$
+
+In terms of the terminology, $\pi$ is the probability of **success**, $\frac{\pi}{1-\pi}$
+is called the **odds**, and $log(\frac{\pi}{1-\pi})$ is the **log-odds**. The 
+logistic regression specification essentially says that the log-odds are a linear 
+function of the independent variables. 
+
+Now, let us write the code to estimate this. 
+
+```{r warning=FALSE}
+LLbinary = function(b0,b1,b2,b3){
+    X = b0 + b1*admit$gre + b2*admit$gpa + b3*admit$rank
+    pi = exp(X)/(1+(exp(X)))
+    p = ifelse(admit$admit == 1, pi, 1 - pi)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+res2 = mle2(minuslogl = LLbinary, start = list(b0 = 0, b1 = 0, b2 = 0, b3 = 0))
+summary(res2)
+```
+
+The estimated logistic regression is the following.
+
+$$ln(\frac{\pi}{1-\pi}) = -3.35 + 0.0017 \times gre + 0.88 \times gpa - 0.60 \times rank$$
+
+The results indicate that gre is not statistically significant. A higher 
+gpa increases the log-odds of admission, and higher rank lowers the log-odds of 
+admission. 
+
+Let us try to understand the marginal effects. A unit increase in gpa increases the log-odds by 0.88. To understand this further, we can write 
+
+$$ln(\frac{\pi_1}{1-\pi_1}) - ln(\frac{\pi}{1-\pi}) = .88$$
+
+Rearranging this, we get 
+
+$$\frac{\pi_1}{1-\pi_1}= \frac{\pi}{1-\pi}e^{0.88}$$
+
+$$\frac{\pi_1}{1-\pi_1}= 2.41\frac{\pi}{1-\pi}$$
+
+Thus, we can say that a unit increase in gpa increases the odds of admission by 
+a factor of 2.41. 
+
+## Probit Regression
+
+Another way to create the link function between X and $\pi$ is to use the following. 
+
+$$\pi = \Phi (X)$$
+
+where $\Phi(X)$ is a cumulative probability of a standard normal distribution. 
+This is called a probit regression. Let us code this. 
+
+```{r warning=FALSE}
+LLbinary = function(b0,b1,b2,b3){
+    X = b0 + b1*admit$gre + b2*admit$gpa + b3*admit$rank
+    pi = pnorm(X)
+    p = ifelse(admit$admit == 1, pi, 1 - pi)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+res3 = mle2(minuslogl = LLbinary, start = list(b0 = 0, b1 = 0, b2 = 0, b3 = 0))
+summary(res3)
+```
+
+You will see that the results are pretty similar to the logistic regression. 
+The coefficients in a probit regression are a bit harder to interpret, and 
+therefore the logistic regression is more commonly used. 
+
+# Count Outcomes
+
+Let us read the file `student.csv`. 
+
+```{r}
+student <- read.csv("../../data/student.csv")
+head(student)
+```
+
+
+## Baseline Model
+The outcome of interest is the variable daysabs, the number of days a student was absent. The baseline model is depicted below.
+![](estpic13.png)
+
+The following estimates the population parameter $\lambda$.
+
+```{r warning=FALSE}
+LLpois = function(lam){
+  p = dpois(x = student$daysabs, lambda = lam)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+res4 = mle2(minuslogl = LLpois, start = list(lam=10))
+summary(res4)
+```
+
+## Poisson Regression
+Now suppose we think that the number of days absent is influenced by the variables
+gender, math, and prog. The data generation process is depicted in the following figure.
+
+![](estpic14.png)
+
+As the domain of $\lambda$ is $(0,\infty)$ the link function is specified as $\lambda = e^X$. The following estimates the Poisson regression.
+
+```{r}
+LLpois = function(b0, b1, b2, b3){
+  X = b0 + b1*student$gender + b2*student$math + b3*student$prog
+  lam = exp(X)
+  p = dpois(x = student$daysabs, lambda = lam)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+res5 = mle2(minuslogl = LLpois, start = list(b0 = log(5.96), b1 = 0, b2 = 0, b3 = 0))
+summary(res5)
+```
+
+The Poisson regression equation is
+
+$$ln(\lambda) = 3.26 + 0.24 \times gender -0.0077 \times math -0.607 \times prog$$
+
+All  variables are statistically significant. Let us understand the marginal 
+effects. The coefficient for gender is 0.24. Gender is coded as 0 for females and 1 for males. 
+$$ln(\lambda_1) - log(\lambda) = 0.24$$
+
+With some alegbra we get, 
+
+$$\lambda_1 = e^{0.24} \lambda$$
+
+and thus 
+
+$$\lambda_1 = 1.27\lambda$$
+
+This means that the average number of days a male student is absent is 1.27 times that 
+of a female student.
+
+# Model Fit
+
+With linear regression $R^2$ is used as a measure of the models 
+performance. The same concept does not translate to binary and count models. 
+
+For a binary regression, a few metrics are useful to assess the model fit. The first is the likelihood, which is normally reported as -2LL. Note that we want this to be smaller. For the baseline model the value of -2LL was 499.9765. For the logistic regression, it is 459.8384. Hence, the regression model is better than the baseline model. Two other metrics that are commonly used are AIC (Akaike Information Criteria) and BIC (Bayesian Information Criteria).
+There are defined as:
+$$𝐴𝐼𝐶 = −2𝐿𝐿 + 2𝑘$$
+$$𝐵𝐼𝐶 = −2𝐿𝐿 + 2𝑘𝑙𝑜𝑔(𝑛)$$
+Where $k$ is the number of parameters to be estimated and $n$ is the number of observations. 
+
+Let us compute these for the Poisson model. 
+
+Metric|Baseline Model|Poisson Regression
+------|--------------|------------------
+$-2LL$|3101.018|2648.787
+$AIC$|3103.018 (k = 1)|2656.787 (k = 4)
+$BIC$|3112.517|2694.782
+----------------------------------------
+
+The metrics clearly indicate that the Poisson regression model is adding value 
+over the baseline model. 
+
+# glm() function 
+The function to estimate a regression model with binary or count outcomes in R is `glm()`. The general syntax is:  
+
+`glm(formula, family=familytype(link=linkfunction), data=)`  
+
+Family|Default Link Function|
+------|---------------------|
+binomial|(link = "logit") |
+gaussian|(link = "identity") |
+Gamma |(link = "inverse")|
+inverse.gaussian|(link = "1/mu^2") |
+poisson|(link = "log")|
+quasi |(link = "identity", variance = "constant")|
+quasibinomial|(link = "logit") |
+quasipoisson|(link = "log")|
+-----------------------------
+The following code estimates the binary and count models with our data.
+
+```{r}
+res6 = glm(admit~gre+gpa+rank,family="binomial",data=admit)
+summary(res6)
+res7 = glm(daysabs~gender+math+prog,family="poisson",data=student)
+summary(res7)
+```

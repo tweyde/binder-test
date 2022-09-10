@@ -1,0 +1,329 @@
+---
+title: "Chapter 17"
+author: "Lawrence Ramsay"
+date: '2022-08-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+if(!require("pacman")){
+  install.packages("pacman")
+}
+
+pacman::p_load("rattle", "dplyr", "magrittr", "mltools", "data.table",
+               "caret", "tree", "scales")
+
+set.seed(6)                              
+index <- caret::createDataPartition(wine$Type,p=0.8,list=FALSE)
+train_wi <- wine[index,]
+test_wi <- wine[-index,]
+
+test_category <- test_wi[["Type"]]
+train_category <- train_wi[["Type"]]
+
+```
+
+### Wine Dataset
+
+```{r}
+
+print(names(wine))
+print(nrow(wine))
+
+```
+
+### Another Classifier - Nearest Neighbor
+
+```{r}
+
+tree <- rpart::rpart(Type~., data=train_wi, subset=index, cp = 0.01)
+
+tree_pred = predict(tree, test_wi, type="class")
+
+with(test_wi, table(tree_pred, Type))
+
+
+```
+
+```{r}
+
+knn_pred <- class::knn(train=train_wi,test=test_wi,cl = train_category)
+
+with(test_wi, table(knn_pred, Type))
+
+```
+
+```{r}
+
+print(paste("KNN Test Accuracy", round(sum(knn_pred == test_category) / length(test_category),2)))
+print(paste("Decision Tree Test Accuracy", round(sum(tree_pred == test_category) / length(test_category),2)))
+
+```
+
+## Cross Validation
+
+```{r}
+
+trControl <- trainControl(method  = "cv",
+                          number  = 10)
+
+fit_knn_10fold <- train(Type ~ .,
+             method     = "knn",
+             tuneGrid   = expand.grid(k = 1),
+             trControl  = trControl,
+             metric     = "Accuracy",
+             data       = wine)
+
+print(paste0("KNN 10 fold Mean Accuracy: ", fit_knn_10fold$results$Accuracy))
+print(paste0("KNN 10 fold Accuracy Standard Deviation: ", fit_knn_10fold$results$AccuracySD))
+```
+
+```{r}
+
+folds <- 10
+cvIndex <- createFolds(factor(wine$Type), folds, returnTrain = T)
+
+trControl <- trainControl(index = cvIndex,
+               method = 'cv', 
+               number = folds)
+
+fit_knn_strat_10fold <- train(Type ~ .,
+             method     = "knn",
+             tuneGrid   = expand.grid(k = 1),
+             trControl  = trControl,
+             metric     = "Accuracy",
+             data       = wine)
+
+print(paste0("KNN 10 fold stratified Mean Accuracy: ", fit_knn_strat_10fold$results$Accuracy))
+print(paste0("KNN 10 fold stratified Accuracy Standard Deviation: ", fit_knn_strat_10fold$results$AccuracySD))
+```
+
+### Significance of Model Differences
+
+```{r}
+trControl <- trainControl(method  = "cv",
+                          number  = 20)
+
+fit_knn_20fold <- train(Type ~ .,
+             method     = "knn",
+             tuneGrid   = expand.grid(k = 1),
+             trControl  = trControl,
+             metric     = "Accuracy",
+             data       = wine)
+
+print(paste0("KNN 20 fold Mean Accuracy: ", fit_knn_20fold$results$Accuracy))
+print(paste0("KNN 20 fold Accuracy Standard Deviation: ", fit_knn_20fold$results$AccuracySD))
+```
+
+```{r}
+
+trControl <- trainControl(method  = "LOOCV")
+
+fit_knn_loocv <- train(Type ~ .,
+             method     = "knn",
+             tuneGrid   = expand.grid(k = 1),
+             trControl  = trControl,
+             metric     = "Accuracy",
+             data       = wine)
+
+print(paste0("KNN LOOCV Mean Accuracy: ", fit_knn_loocv$results$Accuracy))
+print(paste0("KNN LOOCV Accuracy Standard Deviation: ",  sd(fit_knn_loocv$results)))
+```
+
+```{r}
+
+trControl <- trainControl(method  = "cv",
+                          number  = 20)
+
+fit_dt_20fold <- train(Type ~ .,
+             method     = "rpart",
+             trControl  = trControl,
+             tuneGrid = expand.grid(cp = 0.01),
+             metric     = "Accuracy",
+             data       = wine)
+print(paste0("Decision Tree Mean Accuracy: ", fit_dt_20fold$results$Accuracy))
+print(paste0("Decision Tree Accuracy Standard Deviation: ", fit_dt_20fold$results$AccuracySD))
+
+```
+
+
+```{r}
+
+print(paste0("KNN Mean Accuracy: ", fit_knn_20fold$results$Accuracy))
+print(paste0("KNN Accuracy Standard Deviation: ", fit_knn_20fold$results$AccuracySD))
+
+print(paste0("Decision Tree Mean Accuracy: ", fit_dt_20fold$results$Accuracy))
+print(paste0("Decision Tree Accuracy Standard Deviation: ", fit_dt_20fold$results$AccuracySD))
+
+wilcox.test(fit_dt_20fold$resample$Accuracy, 
+            fit_knn_20fold$resample$Accuracy, 
+            paired=TRUE, exact = FALSE, alternative = "two.sided")
+
+```
+
+### Hyper-parameter Tuning
+
+```{r}
+
+folds <- 2
+cvIndex <- createFolds(factor(train_wi$Type), folds, returnTrain = T)
+
+trControl <- trainControl(index = cvIndex,
+               method = 'repeatedcv', 
+               number = folds)
+
+fit_dt_hp_no_fold <- train(Type ~ .,
+             method     = "rpart2",
+             trControl  = trControl,
+             tuneGrid = expand.grid(
+                                    maxdepth = 1:10),
+             metric     = "Accuracy",
+             data       = train_wi)
+
+fit_dt_hp_no_fold_pred <- predict(fit_dt_hp_no_fold, test_wi)
+tab <- caret::confusionMatrix(data = fit_dt_hp_no_fold_pred, reference = test_wi$Type)
+
+print(paste0("Decision Tree Mean Accuracy: ", 
+             round(mean(fit_dt_hp_no_fold$results$Accuracy),3)))
+print(paste0("Decision Tree Accuracy Standard Deviation: ",
+             round(mean(fit_dt_hp_no_fold$results$AccuracySD),3)))
+print(paste0("Decision Tree test Accuracy: ", round(tab$overall["Accuracy"],3)))
+
+```
+
+
+
+```{r}
+folds <- 20
+cvIndex <- createFolds(factor(train_wi$Type), folds, returnTrain = T)
+
+trControl <- trainControl(index = cvIndex,
+               method = 'repeatedcv', 
+               number = folds)
+
+
+fit_dt_hp_fold <- train(Type ~ .,
+             method     = "rpart2",
+             trControl  = trControl,
+             tuneGrid = expand.grid(maxdepth = 1:10),
+             metric     = "Accuracy",
+             data       = train_wi)
+
+fit_dt_hp_fold_pred <- predict(fit_dt_hp_fold, test_wi)
+tab <- caret::confusionMatrix(data = fit_dt_hp_fold_pred, reference = test_wi$Type)
+
+print(paste0("Decision Tree Mean Accuracy: ", 
+             round(mean(fit_dt_hp_fold$results$Accuracy),3)))
+print(paste0("Decision Tree Accuracy Standard Deviation: ",
+             round(mean(fit_dt_hp_fold$results$AccuracySD),3)))
+print(paste0("Decision Tree test Accuracy: ", round(tab$overall["Accuracy"],3)))
+
+```
+
+
+```{r}
+
+acc1 <- data.table(accuracy = fit_dt_hp_no_fold$results$Accuracy,
+           max_depth = fit_dt_hp_fold$results$maxdepth,
+           fold_type = "training_accuracy")
+           
+acc2 <- data.table(
+           max_depth = fit_dt_hp_fold$results$maxdepth,
+           accuracy = fit_dt_hp_fold$results$Accuracy,
+           fold_type = "cross_validation_accuracy")
+
+ggplot(rbind(acc1, acc2)) +
+  geom_line(aes(x = max_depth, accuracy, color = fold_type)) +
+  scale_x_continuous(breaks = pretty_breaks())
+```
+
+
+
+### Estimating Model Performance
+
+```{r}
+folds <- 2
+cvIndex <- createFolds(factor(train_wi$Type), folds, returnTrain = T)
+
+trControl <- trainControl(index = cvIndex,
+               method = 'repeatedcv', 
+               number = folds)
+
+test_acc <- vector()
+train_acc <- vector()
+
+for (md in 1:10) {
+  
+  fit_dt_est <- train(Type ~ .,
+             method     = "rpart2",
+             trControl  = trControl,
+             tuneGrid = expand.grid(maxdepth = md),
+             metric     = "Accuracy",
+             data       = train_wi)
+  
+  fit_dt_est_pred <- predict(fit_dt_est, test_wi)
+  tab <- caret::confusionMatrix(data = fit_dt_est_pred, reference = test_wi$Type)
+  
+  test_acc <- c(test_acc, tab$overall["Accuracy"]) 
+  
+  train_acc <- c(train_acc, fit_dt_est$results$Accuracy)
+}
+
+acc1 <- data.table(accuracy = train_acc,
+           max_depth = 1:10,
+           data_type = "training_accuracy")
+           
+acc2 <- data.table(
+           accuracy = test_acc,
+           max_depth = 1:10,
+           data_type = "validation_accuracy")
+
+ggplot(rbind(acc1, acc2)) +
+  geom_line(aes(x = max_depth, accuracy, color = data_type)) +
+  scale_x_continuous(breaks = pretty_breaks())
+
+```
+```{r}
+folds <- 10
+cvIndex <- createFolds(factor(train_wi$Type), folds, returnTrain = T)
+
+trControl <- trainControl(index = cvIndex,
+               method = 'repeatedcv', 
+               number = folds)
+
+test_acc <- vector()
+train_acc <- vector()
+
+for (md in 1:10) {
+  
+  fit_dt_est <- train(Type ~ .,
+             method     = "rpart2",
+             trControl  = trControl,
+             tuneGrid = expand.grid(maxdepth = md),
+             metric     = "Accuracy",
+             data       = train_wi)
+  
+  fit_dt_est_pred <- predict(fit_dt_est, test_wi)
+  tab <- caret::confusionMatrix(data = fit_dt_est_pred, reference = test_wi$Type)
+  
+  test_acc <- c(test_acc, tab$overall["Accuracy"]) 
+  
+  train_acc <- c(train_acc, fit_dt_est$results$Accuracy)
+}
+
+acc1 <- data.table(accuracy = train_acc,
+           max_depth = 1:10,
+           data_type = "training_accuracy")
+           
+acc2 <- data.table(
+           accuracy = test_acc,
+           max_depth = 1:10,
+           data_type = "validation_accuracy")
+
+ggplot(rbind(acc1, acc2)) +
+  geom_line(aes(x = max_depth, accuracy, color = data_type)) +
+  scale_x_continuous(breaks = pretty_breaks())
+
+```
