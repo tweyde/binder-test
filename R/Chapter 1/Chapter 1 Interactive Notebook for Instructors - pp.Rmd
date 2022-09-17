@@ -1,0 +1,241 @@
+---
+title: 'Chapter 1: Presentation File for Instructors'
+author: "Ram Gopal, Dan Philps, and Tillman Weyde"
+date: "Summer 2022"
+output:
+  powerpoint_presentation:  
+    reference_doc: PPstyle.pptx
+  beamer_presentation: default
+  ioslides_presentation: default
+  slidy_presentation: default
+---
+
+```{r warning=FALSE,include=FALSE}
+if (packageVersion('rmarkdown') <= '1.9') {
+  install.packages('rmarkdown')  # update rmarkdown from CRAN
+}
+```
+
+```{r setup, warning=FALSE,include=FALSE}
+library(knitr)
+knitr::opts_chunk$set(echo = TRUE)
+results='markup' 
+options(scipen = 999, digits = 4) #set to four decimal 
+
+inline_hook <- function (x) {
+  if (is.numeric(x)) {
+    # ifelse does a vectorized comparison
+    # If integer, print without decimal; otherwise print 4 places
+    res <- ifelse(x == round(x),
+      sprintf("%d", x),
+      sprintf("%.4f", x)
+    )
+    paste(res, collapse = ", ")
+  }
+}
+knit_hooks$set(inline = inline_hook)
+results='hide'
+```
+
+# Note to the instructor
+
+The interactive notebooks provided with the book can easily be converted into presentation files in various formats. The approach is to simply add the following in the header section. Please note that **PPstyle.pptx** is a style file that you can easily adapt to change the formatting on the slides.
+
+  slidy_presentation: default
+  
+  beamer_presentation: default
+  
+  ioslides_presentation: default
+  
+  powerpoint_presentation:
+  
+    reference_doc: PPstyle.pptx
+    
+    
+To insert a new slide, use three hyphens ```---```
+
+# Simple Computations
+
+Create a new script file. Let us begin with simple computations in R using `*`,`/`,`sqrt()`,`exp()`, and `log()` operators and functions.
+
+```{r results='hide'}
+25*77  
+25/5  
+sqrt(77)  
+```
+
+# Creating Vectors
+
+To create a vector, the appropriate syntax is `v = c()`. An example is:
+
+```{r}
+v = c(1,2,4,63,7,5)
+```
+
+To create a vector of a sequence, we use `seq()`.
+
+```{r results='hide'}
+vec2 = seq(2,55,by = 3)
+
+```
+
+To create a vector that repeats a number, character, or a vector of numbers or characters, we use `rep()`. Characters must be in quotations.
+
+```{r results='hide'}
+vec1 = rep(1,10)
+vec3 = rep("c",5)
+
+```
+
+# Useful vector based functions in R
+
+`msum(x)` - sum of the values in vector x\
+`min(x)` - minimum value of vector x\
+`max(x)` - maximum value of vector x\
+`mean(x)` - mean value of vector x\
+`median(x)` - median value of vector x\
+`quantile(x, p)` - pth quantile of vector x\
+`sd(x)` - standard deviation of vector x\
+`var(x)` - variance of vector x\
+`IQR(x)` - Inter Quartile Range (IQR) of vector x\
+`diff(range(x))` - total range of vector x
+
+# Creating Data Frames
+
+Let us create three vectors to store information about weight, height, and gender. since gender is not numeric data, we use quotation marks when creating the vector.
+
+```{r results='hide'}
+weight = c(60,72,57,90,95,72)
+height = c(1.75,1.8,1.65,1.9,1.74,1.91)
+gender = c("m","f","m","f","f","m")
+```
+
+# Creating Data Frames
+
+A data frame is a two dimensional variable. To create a data frame called **ghw** using these three vectors, we use the command `data.frame()`. `View()` is a key command that allows you to see the data frame as a table in a separate tab.
+
+```{r results='hide'}
+ghw=data.frame(gender,height,weight)
+ghw
+```
+
+# Information about Data Frames
+
+```{r results='hide'}
+summary(ghw)
+dim(ghw)
+str(ghw)
+head(ghw)
+```
+
+# Adding Columns
+
+You can add columns to a data frame based on the data from existing columns. Let's calculate the Body Mass Index
+
+------------------------------------------------------------------------
+
+```{r}
+ghw$bmi = ghw$weight/ghw$height^2
+knitr::kable(ghw)
+```
+
+# Statistics -- A First Look
+
+Let's begin by computing the arithmetic mean of two groups of data.
+
+```{r}
+g1 = c(34, 49, 64, 38, 60, 78, 67, 36, 19, 37) 
+g2 = c(77, 75, 78, 41, 51, 20, 61, 73, 76, 38) 
+mean(g1) 
+mean(g2)
+```
+
+We can conclude that the average age of individuals in the second group is higher than in the first group. A first glimpse of insights on our data! The mean as a measure of central tendency, however, is susceptible to extreme values, also termed outliers.
+
+# Statistics -- A First Look
+
+Let us see an example of this. Consider the following two groups of data:
+
+```{r}
+g1a = c(34, 49, 64, 38, 60, 78, 67, 36, 19, 37) 
+g2a = c(34, 49, 64, 38, 60, 400, 67, 36, 19, 37) 
+mean(g1a) 
+mean(g2a)
+
+```
+
+A single outlier value in our data nearly doubles the value of the mean, which highlights the great impact of outliers on it.
+
+# Median
+
+```{r}
+median(g1a)
+median(g2a)
+```
+
+# Variance and Standard Deviation
+
+Let us compute the values of the variance for the groups g1 and g2.
+
+```{r }
+var(g1)
+var(g2)
+sd(g1)
+sd(g2)
+```
+
+In addition to a larger mean, group 2 has a higher variance than g1 indicating that the values in the second group are more spread out than in the first group.
+
+# Coefficient of variation
+
+```{r}
+sd(g1)*100/mean(g1) 
+sd(g2)*100/mean(g2) 
+```
+
+# z-score
+
+The z-score indicates how many standard deviations a data point is away from the mean. It is a key business analytic that can be used for anything from identifying mis-sized widgets on a factory line to determining historic extremes in valuations of credit spreads.
+
+```{r}
+(g1-mean(g1))/sd(g1) 
+```
+
+```{r results='hide'}
+scale(g1)
+```
+
+# Outliers
+
+```{r}
+g1a = c(34, 49, 64, 38, 60, 78, 67, 36, 19, 37) 
+g2a = c(34, 49, 64, 38, 60, 400, 67, 36, 19, 37) 
+scale(g1a)[,1]
+scale(g2a)[,1]
+```
+
+The sixth observation in g2a has a z-score of 2.82 suggesting a possible outlier. Z-scores are a simple, easy tool to detect possible outliers in our data.
+
+# Quartile
+
+An extension of the median is the measure quartile, and it illustrates how the data values are distributed.
+
+```{r}
+boxplot(g1)
+quantile(g1) 
+```
+
+------------------------------------------------------------------------
+
+# Covariance and correlation
+
+```{r}
+cov(ghw$weight,ghw$height)
+cor(ghw$weight,ghw$height)
+```
+
+# Some Useful Resources
+
+1.  The R reference card is very useful if you want to look up the basic syntax. You are strongly recommended to download and keep it handy as you work to get comfortable with coding in R. [R Reference Card](https://cran.r-project.org/doc/contrib/Short-refcard.pdf)
+2.  There are a number of other cheatsheets for specific packages and functionalities. You can find a list of them at [Cheatsheets](https://rstudio.com/resources/cheatsheets/%3E)\
+3.  [Quick-R](https://www.statmethods.net/)

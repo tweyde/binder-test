@@ -1,0 +1,7 @@
+"","Invoice ID","Branch","City","Customer type","Gender","Product line","Unit price","Quantity","Tax 5%","Total","Date","Time","Payment","cogs","gross margin percentage","gross income","Rating"
+"1","750-67-8428","A","Yangon","Member","Female","Health and beauty",74.69,7,26.1415,548.9715,2019-01-05,1899-12-31 13:08:00,"Ewallet",522.83,4.761904762,26.1415,9.1
+"2","226-31-3081","C","Naypyitaw","Normal","Female","Electronic accessories",15.28,5,3.82,80.22,2019-03-08,1899-12-31 10:29:00,"Cash",76.4,4.761904762,3.82,9.6
+"3","355-53-5943","A","Yangon","Member","Female","Electronic accessories",68.84,6,20.652,433.692,2019-02-25,1899-12-31 14:36:00,"Ewallet",413.04,4.761904762,20.652,5.8
+"4","315-22-5665","C","Naypyitaw","Normal","Female","Home and lifestyle",73.56,10,36.78,772.38,2019-02-24,1899-12-31 11:38:00,"Ewallet",735.6,4.761904762,36.78,8
+"5","665-32-9167","A","Yangon","Member","Female","Health and beauty",36.26,2,3.626,76.146,2019-01-10,1899-12-31 17:15:00,"Credit card",72.52,4.761904762,3.626,7.2
+"6","692-92-5582","B","Mandalay","Member","Female","Food and beverages",54.84,3,8.226,172.746,2019-02-20,1899-12-31 13:27:00,"Credit card",164.52,4.761904762,8.226,5.9
