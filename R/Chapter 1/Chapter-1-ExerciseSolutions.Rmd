@@ -1,0 +1,139 @@
+---
+title: "ch_1_exercises"
+output: html_document
+date: "2022-10-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally)
+
+```
+
+1. Create a vector called x and place values 10 to 1000. Create a 𝑦 vector that takes the square root of the log of numbers in 𝑥. Plot 𝑥 and 𝑦
+
+```{r}
+
+x <- 10:1000
+y <- sqrt(log(x))
+
+ggplot() +
+  geom_point(aes(x, y))
+
+```
+
+2. In the R 𝐝𝐚𝐭𝐚𝐬𝐞𝐭 package there is a data set called 𝐚𝐢𝐫𝐪𝐮𝐚𝐥𝐢𝐭𝐲. In Python, load the 𝐚𝐢𝐫𝐪𝐮𝐚𝐥𝐢𝐭𝐲.𝐜𝐬𝐯 data file from the GitHub repository
+
+```{r}
+
+airquality <- data.table(readr::read_csv("../../data/airquality.csv", show_col_types = FALSE))
+
+head(airquality, 4)
+
+```
+
+3. Mean, median and 75th percentile values of 𝐓𝐞𝐦𝐩
+
+```{r}
+
+mean(airquality$Temp)
+median(airquality$Temp)
+quantile(airquality$Temp, 0.75)
+
+```
+
+4. Create a subset dataframe called 𝐬1 which has data for all days in June ### not explained in text
+
+```{r}
+
+s1 <- airquality[Month == 6]
+head(s1, 5)
+
+```
+
+4. Draw a plot from 𝐬1 of 𝐓𝐞𝐦𝐩 and 𝐒𝐨𝐥𝐚𝐫.𝐑
+
+```{r}
+
+ggplot(s1) +
+  geom_point(aes(Temp, Solar.R))
+
+```
+
+5. What is the median value of 𝐒𝐨𝐥𝐚𝐫.𝐑 in the 𝐬1 dataframe?
+
+```{r}
+
+median(s1$Solar.R)
+
+```
+
+6. In R, load the MASS package. There is a data set called Cars93. In Python, load the 93𝐜𝐚𝐫𝐬.𝐜𝐬𝐯 data file
+
+```{r}
+
+cars <- data.table(MASS::Cars93)
+head(cars, 20)
+
+```
+
+7. Mean, median, and 25th percentile values of 𝐌𝐏𝐆 on high way
+
+```{r}
+
+mean(cars$MPG.highway)
+median(cars$MPG.highway)
+quantile(cars$MPG.highway, 0.25)
+
+```
+
+8. Create a subset dataframe called 𝐩1 which has data for all Non-4WD cars that weigh over 3500
+
+9. Draw a plot from 𝐩1 of price and horsepower
+
+```{r}
+
+p1 <- cars[(DriveTrain != "4WD") & (Weight >= 3500)]
+
+ggplot(p1) +
+  geom_point(aes(Price, Horsepower))
+
+```
+
+10. What is the median luggage room in the 𝐩1 dataframe?
+
+```{r}
+
+median(na.omit(p1$Luggage.room))
+
+```
+
+11. In R, install the package 𝐩𝐥𝐦, load the library and load the data using the command 𝐝𝐚𝐭𝐚(𝐌𝐚𝐥𝐞𝐬). In Python, load 𝐌𝐚𝐥𝐞𝐬.𝐜𝐬𝐯 from the repository.
+
+```{r}
+
+males <- data.table(readr::read_csv("../../data/Males.csv", show_col_types = FALSE))
+
+head(males, 5)
+
+```
+
+12. Create a frequency table between industry and residence. ### not explained in text Where do people in manufacturing mostly live and by what proportion? What proportion of people in the south are in Transportation? What is the most popular industry for people living in rural_area?
+
+```{r}
+
+males[, .N, by = c("industry", "residence")][order(industry, residence)]
+
+```
+

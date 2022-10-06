@@ -1,0 +1,116 @@
+---
+title: "Chapter-2-ExerciseSolutions"
+output: html_document
+date: "2022-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally)
+
+```
+
+```{r}
+
+gapminder = data.table(readr::read_csv('../../data/gapminder.csv', show_col_types = FALSE))
+
+head(gapminder , 4)
+
+```
+
+1. Calculate the average life expectancy for each year.
+
+```{r}
+
+gapminder[, .(lifeExp = mean(lifeExp)), by = "year"]
+
+```
+
+2. Plot year versus life expectancy and draw a horizontal line at the average life expectancy value. Color the points based on the continent
+
+```{r}
+
+ggplot(gapminder) +
+  geom_point(aes(year, lifeExp, color = continent)) +
+  geom_hline(aes(yintercept = mean(lifeExp)), color = "blue")
+
+```
+
+3. Calculate the total population for each continent for each year. Create an appropriate plot to visualize the data
+
+```{r}
+
+gapminder[, .(pop = sum(pop)), by = "year"]
+
+```
+
+```{r}
+
+ggplot(gapminder) +
+  geom_col(aes(year, pop / 1000000000)) +
+  labs(title = "Population per year",
+       y = "population (billions)")
+
+```
+
+4. Plot GDP per capita for each year for African countries. Add appropriate labels to indicate the country name.
+
+```{r}
+
+af = gapminder[continent == "Africa"]
+
+head(af, 5)
+
+```
+
+```{r, fig.height = 8}
+
+ggplot(af, aes(year, gdpPercap)) +
+  geom_line() +
+  facet_wrap(vars(country))
+
+```
+
+```{r}
+
+usedcars = readr::read_csv('../../data/UsedCars2017.csv',
+                           show_col_types = FALSE)
+
+head(usedcars, 5)
+
+```
+
+5. Create a plot of 𝐀𝐠𝐞 and 𝐌𝐢𝐥𝐞𝐚𝐠𝐞. What conclusions can you draw from the plot?
+
+```{r}
+
+ggplot(usedcars) +
+  geom_point(aes(Age, Mileage))
+
+```
+
+6. Explore the data by creating various plots and document any insights from visualization
+
+```{r}
+
+summary(usedcars)
+
+```
+
+```{r}
+
+GGally::ggpairs(usedcars, progress = FALSE)
+
+```
+
