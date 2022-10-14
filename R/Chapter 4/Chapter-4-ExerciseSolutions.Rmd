@@ -1,0 +1,186 @@
+---
+title: "Chapter-4-ExerciseSolutions"
+output: html_document
+date: "2022-10-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally)
+
+usedcars = readr::read_csv('../../data/UsedCars2017.csv',
+                           show_col_types = FALSE)
+
+```
+
+
+1. Create a function that takes two numbers 𝑥 and 𝑦 and returns 𝑥3+𝑦3.
+
+```{r}
+
+myfunction <- function(x, y) {
+  
+  return(x ^ 3 + y ^ 3)
+  
+}
+
+myfunction(2, 2)
+
+```
+
+
+2. Create a function that takes in a numeric vector. The function should do the following: (1) takes all values below the median and calculates the mean of these, (2) takes all values above the median and calculates the mean of these, and (3) return the difference in the value between the higher and the lower mean. Test it with a few vectors from the data sets.
+
+```{r}
+
+myfunction2 <- function(v) {
+  
+  cutoff <- median(v)
+  lower <- mean(v[v < cutoff])
+  upper <- mean(v[v > cutoff])
+  
+  return(upper - lower)
+  
+}
+
+print(myfunction2(1:10))
+
+print(myfunction2(usedcars$Price))
+
+print(myfunction2(usedcars$MPG))
+
+```
+
+3. Create a function that takes in a numeric vector. The output should be a vector with running median values. The ith element of the output vector should be the median of the values in the input vector from 1 to i.
+
+```{r}
+
+myfunction3 <- function(variables) {
+
+  v_med <- vector()
+  
+  for (i in v) {
+    
+    v_med[i] <- median(v[1:i])
+    
+  }
+  
+  return(v_med)
+  
+}
+
+myfunction3(1:10)
+
+
+```
+
+
+4. Create a function to return TRUE if a given integer is an element of a given vector. For example, a given vector is (1,3,5,7), if the given integer is 7, the function returns TRUE.
+
+```{r}
+
+myfunction4 <- function(v, element) {
+  
+  return(element %in% v)
+  
+}
+
+myfunction4(c(1,3,5,7), 7)
+
+myfunction4(c(1,3,5,7), 6)
+
+```
+
+5. Create a function that returns the total number of divisors that a certain integer has (other than 1 and itself). List all divisors.
+
+```{r}
+
+myfunction5 <- function(n) {
+  
+  devisors <- vector()
+  
+  for (i in 2:(n-1)) {
+    
+    if ((n %% i) == 0) {
+      devisors <- append(devisors, i)
+      print(i)
+    }
+    
+  }
+  
+  return(sum(devisors))
+  
+  
+}
+
+print(paste("Sum Devisors:", myfunction5(6)))
+
+```
+
+6. Create a function which replaces the missing values in a vector with the median of the input vector and ouputs the vector without any missing values.
+
+```{r}
+
+v <- c(1:3, NA, 4:6, NA)
+
+myfunction6 <- function(variables) {
+  
+  return(replace(v, is.na(v), median(na.omit(v))))
+  
+}
+
+myfunction6(v)
+
+```
+
+7. Create a function which calculates the Euclidean distance between two points. The input of this function should be two vectors of form (x1,y1) and (x2,y2) and the output the calculation of the Euclidean distance. The formula for the Euclidean distance is (𝑥1−𝑥2)2+(𝑦1−𝑦2)2⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯√
+
+
+```{r}
+
+a = list(x = 1, y = 5)
+b = list(x = 2, y = 8)
+  
+myfunction7 <- function(a, b) {
+  
+  return(sqrt(((a$x - b$x)^2) + ((a$y - b$y)^2)))
+  
+}
+
+myfunction7(a, b)
+
+```
+
+8. Create a function that takes in a numeric vector and returns the number of outliers. In this case, outliers are defined as values that are 'two standard deviations away from the median'. Test the function with the 𝐒𝐚𝐥𝐚𝐫𝐲 variable in the 𝐁𝐚𝐬𝐞𝐛𝐚𝐥𝐥.𝐜𝐬𝐯 file.
+
+```{r}
+
+baseball = readr::read_csv('../../data/Baseball.csv',
+                           show_col_types = FALSE)
+head(baseball)
+
+```
+
+```{r}
+
+myfunction8 <- function(v) {
+  
+  v[(v > median(v) + (sd(v) * 2)) | (v < median(v) - (sd(v) * 2))]
+  
+}
+
+myfunction8(baseball$Salary)
+
+```
+
