@@ -1,0 +1,464 @@
+---
+title: "Chapter-17-ExerciseSolutions"
+output: html_document
+date: "2022-10-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally, tictoc, caret, rpart, kknn, rattle,
+               ggimage, rsvg, cvms)
+
+```
+
+```{r}
+head(iris)
+```
+
+
+## Exercise 1
+
+Implement the model selection and HP tuning as above for the iris dataset.
+
+Our question now is, whether to use KNN or a Decision Tree (DT) classifier. We start by training both models on our training set and calculate the performance on the test set. 
+
+### Data Preparation
+
+We start off by splitting our data in train and test sets:
+
+```{r}
+
+sample <- caTools::sample.split(iris$Species, SplitRatio = 0.7)
+
+train <- subset(iris, sample ==  TRUE)
+test <- subset(iris, sample == FALSE)
+
+```
+
+### Model Tuning
+
+We train both classifiers and check their accuracy on training and test sets:
+
+Both models do extremely well on train and test set, with the KNN performing better on the unseen data. vary the n_neighbors parameter for KNN:
+
+```{r}
+
+model_knn = caret::train(Species ~ ., data=train, method='knn',
+                        tuneGrid = expand.grid(k = 5))
+
+fitted <- predict(model_knn)
+predicted <- predict(model_knn, test)
+
+paste("KNN Train Accuracy = ",confusionMatrix(reference = train$Species, data = fitted)$overall[1])
+paste("KNN Test Accuracy = ",confusionMatrix(reference = test$Species, data = predicted)$overall[1])
+
+
+```
+
+```{r}
+
+
+model_tree = caret::train(Species ~ ., data=train, method='rpart',
+                        tuneGrid = expand.grid(cp = 0))
+
+fitted <- predict(model_tree)
+predicted <- predict(model_tree, test)
+
+paste("Decision Tree Train Accuracy = ",
+      confusionMatrix(reference = train$Species, data = fitted)$overall[1])
+paste("Decision Tree Test Accuracy = ",
+      confusionMatrix(reference = test$Species, data = predicted)$overall[1])
+
+
+```
+
+
+
+Both models do extremely well on train and test set, with the KNN performing better on the unseen data.
+
+Vary the n_neighbors parameter for KNN:
+
+```{r}
+
+knn_acc <- data.table()
+
+for (k in 1:10) {
+  model_knn = caret::train(Species ~ ., data=train, method='knn',
+                          tuneGrid = expand.grid(k = k))
+  
+  fitted <- predict(model_knn)
+  predicted <- predict(model_knn, test)
+  
+  tr_acc <- round(confusionMatrix(reference = train$Species, data = fitted)$overall[1],2)
+  ts_acc <- round(confusionMatrix(reference = test$Species, data = predicted)$overall[1],2)
+  
+  knn_acc <- rbind(knn_acc, data.table(k = k,  train_acc = tr_acc, ts_acc = ts_acc))
+}
+
+knn_acc
+
+```
+
+plot the validation curve:
+
+
+```{r}
+
+data.table::melt(knn_acc, "k", c("ts_acc", "train_acc")) %>%
+ ggplot() +
+  geom_line(aes(k, value,  color = variable)) 
+
+```
+
+## Exercise 2
+
+Implement nested cross-validation for tuning the max_depth of the decision tree on wine dataset.
+
+We start-off by importing the wine dataset:
+
+
+
+```{r}
+
+head(wine)
+
+```
+
+```{r}
+
+index = createDataPartition(wine$Type,p = 0.6,list = F)
+train_wi <- wine[index,]
+test_wi <- wine[-index,]
+
+```
+
+Model Tuning
+
+```{r}
+
+fitControl <- trainControl(## 10-fold CV
+                           method = "cv",
+                           number = 5)
+
+dt_accuracy <- data.table()
+dt_sd <- data.table()
+
+for (d in 1:10) {
+  
+  tree_cv_depth = train(Type ~ ., data=train_wi, method='rpart2',metric="Accuracy",
+                    trControl= fitControl,
+                    tuneGrid = expand.grid(maxdepth = d))
+  
+  dt_accuracy <- rbind(dt_accuracy, data.table(max_depth = d,
+                                           accuracy = tree_cv_depth$resample$Accuracy,
+                                           fold = tree_cv_depth$resample$Resample))
+  
+}
+
+
+dcast(dt_accuracy, max_depth ~ fold, value.var = "accuracy")
+
+
+```
+
+```{r}
+dt_accuracy[, .(accuracy = mean(accuracy)), by = "max_depth"] %>%
+ggplot() +
+  geom_line(aes(max_depth, accuracy)) +
+  labs(title = "Validation Curve with DT and cross-validation",
+       x = "Max Depth", y = "Accuracy") +
+  scale_x_continuous(breaks=c(1:10))
+
+```
+
+From the above results it would seem that 6 is the optimal maximum depth for our classification tree, on this data.
+Exercise 3
+
+Implement a validation curve plot that shows the accuracies plus and minus the standard deviation.
+
+```{r}
+
+dt_accuracy[, .(accuracy = mean(accuracy), sd_accuracy = sd(accuracy)), by = "max_depth"] %>%
+ggplot() +
+  geom_line(aes(max_depth, accuracy)) +
+  labs(title = "Validation Curve with DT and cross-validation",
+       x = "Max Depth", y = "Accuracy") +
+  scale_x_continuous(breaks=c(1:10)) +
+  geom_errorbar(aes(
+    max_depth, accuracy,
+    ymin = (accuracy - sd_accuracy),
+                    ymax = (accuracy + sd_accuracy)), 
+    color = "red")
+
+```
+
+## Exercise 4
+
+Tune a KNN model on the Abalone dataset with the hyperparameters k (number of neighbors), and p (metric exponent). Evaluate the results in a 2-dimensional grid search with cross-validation. Make sure to avoid overfitting and estimate model performance.
+
+Here it is the link to the Abalone dataset: https://archive.ics.uci.edu/ml/datasets/Abalone
+
+Dataset Information
+
+Predicting the age of abalone from physical measurements. The age of abalone is determined by cutting the shell through the cone, staining it, and counting the number of rings through a microscope -- a boring and time-consuming task. Other measurements, which are easier to obtain, are used to predict the age. Further information, such as weather patterns and location (hence food availability) may be required to solve the problem. From the original data examples with missing values were removed (the majority having the predicted value missing), and the ranges of the continuous values have been scaled for use with an ANN (by dividing by 200).
+
+The aim of this exercise is to predict the age of abalone from physical measurements. The age of abalone is determined by cutting the shell through the cone, staining it, and counting the number of rings through a microscope, a boring and time-consuming task. Thankfully Machine Learning can help us with this!
+
+
+```{r}
+
+ab <- readr::read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/abalone/abalone.data",
+                      col_names = FALSE, show_col_types = FALSE) %>%
+  data.table()
+
+names(ab) <- c("sex", "length", "diameter", "height", "whole_weight", "shucked_weight", 
+               "viscera_weight", "shell_weight", "rings")
+
+head(ab)
+
+```
+
+Data Preparation
+
+We start off with converting the categorical data to numbers (one hot encoding):
+
+```{r}
+
+ab$sex <- factor(ab$sex)
+
+```
+
+We split the data in training and test sets:
+
+```{r}
+
+sample <- caTools::sample.split(ab$rings, SplitRatio = 0.7)
+
+train_ab <- subset(ab, sample ==  TRUE)
+test_ab <- subset(ab, sample == FALSE)
+
+```
+
+Normalize the features:
+
+
+```{r}
+
+train_ab_sc <- scale(train_ab[, !c("sex", "rings")]) %>%
+  data.table() %>%
+  .[, rings := train_ab$rings] %>%
+  .[, sex := train_ab$sex] 
+
+test_ab_sc <- scale(test_ab[, !c("sex", "rings")]) %>%
+  data.table() %>%
+  .[, rings := test_ab$rings] %>%
+  .[, sex := test_ab$sex] 
+
+```
+
+Model Tuning
+
+Create a gridsearch to test the model hyperparameters:
+
+
+```{r}
+
+train_control <- trainControl(method = "cv",
+                           number = 5)
+
+tune_grid <- expand.grid(kmax = 1:20,
+             distance = 1:2,
+             kernel = c("rectangular"))
+
+knn_ab_results_long <- data.table()
+
+for (t in 1:nrow(tune_grid)) {
+  
+  tic(msg = paste("kmax =", tune_grid[t,1],
+                  "distance =", tune_grid[t,2]))
+  knn_ab = caret::train(rings ~ ., data=train_ab_sc, method='kknn',
+                       tuneGrid = tune_grid[t,],
+                       trControl= fitControl
+                        )
+  time <- toc()
+  
+  knn_ab_results_long <- 
+    rbind(knn_ab_results_long, 
+      data.table(tune_grid[t,],
+                 time = str_remove(time$callback_msg, " elapsed"),
+                 rmse = knn_ab$resample$RMSE,
+                 fold = knn_ab$resample$Resample
+                 ))
+  
+}
+
+knn_ab_results_summary <- knn_ab_results_long %>%
+    .[, .(mean_rmse = mean(rmse), 
+                   sd_rmse = sd(rmse)),
+      by = c("kmax", "distance", "kernel")]
+
+knn_ab_results <- 
+dcast(knn_ab_results_long, kmax + distance + kernel + time  ~ fold,
+      value.var = "rmse") %>%
+  merge(., knn_ab_results_summary, 
+        by = c("kmax", "distance", "kernel")) %>%
+.[order(-mean_rmse)]
+
+```
+
+```{r}
+head(knn_ab_results, 5)
+```
+
+
+Above we see the details of the best performing model.
+
+```{r}
+
+tune_grid <- expand.grid(kmax = 1,
+             distance = 1,
+             kernel = c("rectangular"))
+
+knn_ab_best = caret::train(rings ~ ., data=train_ab_sc,
+                           method='kknn',
+                     tuneGrid = tune_grid,
+                     trControl= fitControl
+                      )
+
+predicted <- predict(knn_ab_best, test_ab)
+
+paste("KNN Train RMSE = ",
+      round(knn_ab_best$results$RMSE,2))
+paste("KNN Train RMSE = ",
+      round(postResample(pred = predicted, 
+                         obs = test_ab$rings)[[1]],2))
+
+```
+
+The negative root squared mean error on the test data is very similar to the training data's therefore we can conclude that our model did not overfit the training.
+Additionally we can estabilish the expected error of our model on unseen data (i.e., it predicts the age of the abalone with a RMSE of 2.25 years).
+Display Results
+
+```{r}
+
+ggplot() +
+  geom_point(aes(test_ab$rings,predicted)) +
+  geom_abline(intercept = 0) +
+  xlim(0, 30) +
+  ylim(0, 30) +
+  labs(title = "True vs predicted Number of Rings",
+       y = "Predicted number of rings",
+       x = "True number of rings")
+
+```
+
+## Exercise 5
+
+Tune a DT to classify web pages in the Website Phishing dataset with the hyperparameters minimum numbers to split a leaf, maximum tree depth, minimum number of samples in a leaf. Evaluate the results in a 3-dimensional grid search with cross-validation. Make sure to avoid overfitting and estimate model performance.
+
+The Website Phishing" dataset can be found here: https://archive.ics.uci.edu/ml/datasets/Website+Phishing# (enter the Data Folder).
+Given the *arff format of this dataset we import it following Sklearn documentation: https://docs.scipy.org/doc/scipy/reference/generated/scipy.io.arff.loadarff.html
+
+#### Dataset information
+
+The phishing problem is considered a vital issue in the .COM industry especially e-banking and e-commerce taking the number of online transactions involving payments. We have identified different features related to legitimate and phishy websites and collected 1353 different websites from difference sources. Phishing websites were collected from Phishtank data archive (www.phishtank.com), which is a free community site where users can submit, verify, track and share phishing data. The legitimate websites were collected from Yahoo and starting point directories using a web script developed in PHP. The PHP script was plugged with a browser and we collected 548 legitimate websites out of 1353 websites. There is 702 phishing URLs, and 103 suspicious URLs.
+
+When a website is considered SUSPICIOUS that means it can be either phishy or legitimate, meaning the website held some legit and phishy features.
+
+```{r}
+
+url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/00379/PhishingData.arff'
+
+ph <- foreign::read.arff(url)
+
+head(ph)
+```
+
+The collected features hold the categorical values: Legitimate, Suspicious and Phishy. These values have been replaced with numerical values 1,0 and -1 respectively.
+Data Preparation
+
+Notice how the data is of type "bytes", hence those "b".
+
+```{r}
+
+ph %>%
+  data.table() %>%
+  .[, .N, by = "Result"]
+
+```
+
+Note: Stratified sampling is used to fix the class imbalance which would adversely affect the model. 
+
+```{r}
+
+ph_bal <- data.table(groupdata2::downsample(ph, cat_col = "Result"))
+
+ph_bal[, .N, by = "Result"]
+
+```
+```{r}
+
+sample <- caTools::sample.split(ph_bal$Result, SplitRatio = 0.7)
+
+train_ph <- data.table(subset(ph_bal, sample ==  TRUE))
+test_ph <- data.table(subset(ph_bal, sample == FALSE))
+
+```
+
+
+#### Model Tuning
+
+Create a gridsearch to test the model hyperparameters:
+
+```{r}
+
+fitControl <- trainControl(method = "cv",  number = 5)
+
+tree_ph = train(Result ~ ., data=train_ph, method='rpart2', metric="Accuracy",
+                  trControl= fitControl,
+                  tuneGrid = expand.grid(maxdepth = 1:10))
+
+fitted <- predict(tree_ph)
+predicted <- predict(tree_ph, test_ph)
+
+paste("Best Tune Depth = ", tree_ph$bestTune[[1]])
+paste("Train Accuracy = ",round(confusionMatrix(reference = train_ph$Result, data = fitted)$overall[1],5))
+paste("Test Accuracy = ",round(confusionMatrix(reference = test_ph$Result, data = predicted)$overall[1],5))
+
+```
+
+
+The accuracy on the test data is very similar to the training data's therefore we can conclude that our model did not overfit the training set.
+Additionally we can estabilish the expected accuracy of our model on unseen data (i.e., it correctly identifies about 87% of the websites).
+
+#### Display Results
+
+```{r}
+ 
+ph_table <- data.table(confusionMatrix(reference = train_ph$Result, data = fitted)$table)
+  
+names(ph_table) = c("Target","Prediction","N")
+
+ph_table %>%
+  .[Target == -1, Target := "Fishy"]  %>%
+  .[Prediction == -1, Prediction := "Fishy"]  %>%
+  .[Target == 0, Target := "Suspicious"]  %>%
+  .[Prediction == 0, Prediction := "Suspicious"]  %>%
+  .[Target == 1, Target := "Legitimate"]  %>%
+  .[Prediction == 1, Prediction := "Legitimate"]
+
+cvms::plot_confusion_matrix(as_tibble(ph_table))
+
+```
+
