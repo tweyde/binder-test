@@ -32,7 +32,7 @@ library(rattle)
 # Get the data and pre-process
 ## Read data
 ```{r}
-dataset <- read.csv('diabetes.csv', header = TRUE)
+dataset <- read.csv('../../data/diabetes.csv', header = TRUE)
 dim(dataset)
 ```
 ## Partition Data
@@ -53,8 +53,24 @@ sapply(list(df_train,df_val,df_test),nrow)
 ```
 # Linear Regression Model
 * For this and the subsequent chapter, we will make use of the caret package that provides a uniform approach to work with a variety of predictive models. Also note the use of :: notation. This is used to indicate the package that contains the function that follows. This is helpful as often different packages may use the same function names.
-```{r}
-df_train[-11] = scale(df_train[-11])
+```{r warning=FALSE}
+means = apply(df_train[-11],2,mean)
+sds = apply(df_train[-11],2,sd)
+scalefun = function(x){
+  return((x-means)/sds)
+}
+df_train[-11] = data.frame(sapply(df_train[-11],scalefun))
+df_val[-11] = data.frame(sapply(df_val[-11],scalefun))
+df_test[-11] = data.frame(sapply(df_test[-11],scalefun))
+printfun = function(x){
+  means = apply(x[-11],2,mean)
+  sds = apply(x[-11],2,sd)
+  print(paste(mean(means),mean(sds)))
+}
+printfun(df_train)
+printfun(df_val)
+printfun(df_test)
+
 lr = caret::train(target ~ ., method='lm',data = df_train)
 train_pred = predict(lr,newdata = df_train)
 val_pred = predict(lr,newdata = scale(df_val[-11]))
@@ -463,7 +479,7 @@ knitr::kable(res)
 * Read data
 
 ```{r}
-df <- read.csv("ENB2012_data.csv")
+df <- read.csv("../../data/ENB2012_data.csv")
 ```
 
 * Create training, validation and test datasets.

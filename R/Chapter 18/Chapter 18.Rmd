@@ -32,7 +32,7 @@ library(rattle)
 # Get the data and pre-process
 ## Read data
 ```{r}
-dataset <- read.csv('diabetes.csv', header = TRUE)
+dataset <- read.csv('../../data/diabetes.csv', header = TRUE)
 dim(dataset)
 ```
 ## Partition Data
@@ -51,13 +51,35 @@ df_val = dataset[val_index,]
 df_test = dataset[test_index,]
 sapply(list(df_train,df_val,df_test),nrow)
 ```
+```{r warning=FALSE}
+means = apply(df_train[-11],2,mean)
+sds = apply(df_train[-11],2,sd)
+scalefun = function(x){
+  return((x-means)/sds)
+}
+df_train[-11] = data.frame(sapply(df_train[-11],scalefun))
+df_val[-11] = data.frame(sapply(df_val[-11],scalefun))
+df_test[-11] = data.frame(sapply(df_test[-11],scalefun))
+```
+
+```{r}
+printfun = function(x){
+  means = apply(x[-11],2,mean)
+  sds = apply(x[-11],2,sd)
+  print(paste(mean(means),mean(sds)))
+}
+printfun(df_train)
+printfun(df_val)
+printfun(df_test)
+```
+
+
 # Regression Model and predict
 ```{r}
-df_train[-11] = scale(df_train[-11])
 lr = caret::train(target ~ ., method='lm',data = df_train)
 train_pred = predict(lr,newdata = df_train)
-val_pred = predict(lr,newdata = scale(df_val[-11]))
-test_pred = predict(lr,newdata = scale(df_test[-11]))
+val_pred = predict(lr,newdata = df_val[-11])
+test_pred = predict(lr,newdata = df_test[-11])
 ```
 
 # Compute functions for Residual Mean,MSE, RMSE and R_2
@@ -474,7 +496,7 @@ knitr::kable(res)
 * Read data
 
 ```{r}
-df <- read.csv("ENB2012_data.csv")
+df <- read.csv("../../data/ENB2012_data.csv")
 ```
 
 * Data preparation
