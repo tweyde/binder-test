@@ -1,0 +1,825 @@
+---
+title: "Chapter-18-ExerciseSolutions"
+output: html_document
+date: "2022-10-22"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, caret, mlbench, readr, glmnet, RSNNS,
+               modelr)
+
+diabetes = readr::read_csv('../../data/diabetes.csv',
+                           show_col_types = FALSE)
+
+rm <- function(actual,pred) {
+  return(mean(abs(actual-pred)))
+}
+mse <- function(actual,pred) {
+  return(mean((pred-actual)^2))
+}
+rmse <- function(actual,pred) {
+  return(mse(pred,actual)^0.5)
+}
+R_2 <- function(actual,pred){
+  mean_v = rep(mean(actual),length(actual))
+  SST = sum((actual-mean_v)^2)
+  SSE = sum((actual-pred)^2)
+  return(1-(SSE/SST))
+}
+
+```
+
+# Chapter 18: Regression Models and Evaluation
+## Exercises solutions
+
+### Exercise 1
+
+Inspect the coefficients of the linear model trained on the polynomial features. Find the coefficient responsible for the large error and explain why it has an especially strong effect on the polynomial features.
+
+For this exercise we will use the diabetes dataset: this dataset has 10 attributes about a patient as features and disease progression after a year as the target. The dataset contains data for 442 patients.
+
+
+```{r}
+
+dt <- diabetes %>% data.table()
+y <- dt[["target"]]
+
+train_test_index <- caret::createDataPartition(y, times = 1, p = 0.7)
+
+train <- dt[ train_test_index$Resample1,]
+test_init  <- dt[-train_test_index$Resample1,]
+
+y_test <- test_init[["target"]]
+
+test_val_index <- caret::createDataPartition(y_test, times = 1, p = 0.5)
+
+test <- test_init[ test_val_index$Resample1,]
+validation  <- test_init[-test_val_index$Resample1,]
+
+base::rm(train_test_index,test_val_index, test_init, y_test, y, dt)
+
+```
+
+We stadardise the features:
+
+
+```{r}
+
+train_sc_mat <- scale(train[, !c("target")])
+
+test_sc_mat <- scale(test[, !c("target")])
+
+val_sc_mat <- scale(validation[, !c("target")])
+
+```
+
+We process the data to a second polynomial degree, so that we have more features that relate to the input in different ways:
+
+``` {r}
+
+train_sc_poly <- 
+  cbind(train_sc_mat, polym(train_sc_mat, degree = 2, raw = TRUE)) %>%
+  data.table() %>%
+  .[, target := train$target] 
+
+test_sc_poly <- 
+  cbind(test_sc_mat, polym(test_sc_mat, degree = 2, raw = TRUE)) %>%
+  data.table() %>%
+  .[, target := test$target]
+
+val_sc_poly <- 
+  cbind(val_sc_mat, polym(val_sc_mat, degree = 2, raw = TRUE)) %>%
+  data.table() %>%
+  .[, target := validation$target]
+
+```
+
+Model Training
+
+With the available programming libraries in Python or R, linear regression is very easy to use and just like the previous models for classification we use their fit and predict methods:
+
+
+```{r, warning=FALSE}
+
+lm_dia = lm(target ~ ., data = train_sc_poly)
+
+#lm_dia = caret::train(target ~ ., method='lm', data = train_sc_poly)
+
+train_pred = predict(lm_dia, newdata = train_sc_poly)
+val_pred = predict(lm_dia, newdata = test_sc_poly)
+test_pred = predict(lm_dia, newdata = val_sc_poly)
+
+print(paste("Train RMSE:", rmse(train$target, train_pred)))
+print(paste("Test RMSE:", rmse(test$target, test_pred)))
+print(paste("Validation RMSE:", rmse(validation$target, val_pred)))
+
+```
+
+Model Evaluation
+
+We can retrieve the non-zero polynamial features and see their weight:
+
+```{r}
+
+data.table(coef = lm_dia$coefficients,
+             feature = names(lm_dia$coefficients)) %>%
+  na.omit() %>%
+  .[order(-abs(coef))]
+
+```
+
+It is particularly evident how some features' coefficients tend to "explode" (e.g., 'x1^2': 67335183326055.91 and 'x1': -1524667891983.5903) in the model's research of fitting each data point exactly. This is the typical behaviour of a model overfitting the traininig data, therefore incapable of generalising on unseen data and likely to yield much big errros on validation and test sets. This issue with high-order polynomials tends to get worse with the increasing of the polynomial order.
+
+Standard solutions to this problem are regularizations methods such as L1 (Lasso) and L2 (Ridge) which add a penalty term to the model's cost function proportional to the size of the coefficients, hence penalizing large values. Namely, the L1 regularization adds a penalty equal to the absolute value of the magnitude of the coefficients, whereas the L2 regularization one equal to the square of the magnitude. These techniques can help reduce variance in the model and yield smaller generalization errors.
+
+Note: R automatically NA's exploding variables so they are not visible in the output.
+
+### Exercise 2
+
+Implement a grid search for the alpha parameter of a linear regression on the train/validation split with the poly 2 features of the diabetes data:
+
+
+Note: In R alpha is defined as: The elastic net mixing parameter, with 0≤α≤1. More info in ?glmnet
+
+```{r}
+
+training_curve <- data.table()
+
+for (a in seq(0,1, length.out = 100)) {
+  
+  # loop_lm_dia = caret::train(target ~ ., method = "glmnet", data = train,
+  #                           tuneGrid = expand.grid(alpha = a, lambda = 1))
+  # 
+  # fitted <- predict(loop_lm_dia)
+  # predicted <- predict(loop_lm_dia, validation)
+  
+  loop_lm_dia = glmnet::glmnet(as.matrix(train[, !c("target")]), as.matrix(train_sc_poly[, .(target)]), alpha = a, lambda = 1)
+
+  fitted <- predict(loop_lm_dia, as.matrix(train[, !c("target")]))
+  predicted <- predict(loop_lm_dia, as.matrix(validation[, !c("target")]))
+  
+  loop_train_rmse <- rmse(train$target, fitted)
+  loop_val_rmse <- rmse(validation$target, predicted)
+  
+  training_curve <- rbind(training_curve, data.table(alpha = a,  train_rmse = loop_train_rmse, val_rmse = loop_val_rmse))
+}
+
+head(training_curve)
+
+```
+
+```{r}
+
+data.table::melt(training_curve, "alpha", c("train_rmse", "val_rmse")) %>%
+ ggplot() +
+  geom_line(aes(alpha, value,  color = variable)) 
+
+```
+We notice how larger values of α for the Ridge (L2) regularization loss reduce the model's variance resulting in progressively higher errors on the trainig data but a better generalization error on the validation data. Regularization techniques can help us control what in ML is described as bias-variance trade-off of a model, which relates to its degree of fitting the trainig and validation data (underfitting-overfitting). It's the operator's task to find the sweat-spot where the model performs at the desired/required accuracy level on either or both the trainig and validation data.
+
+### Exercise 3
+
+Implement a grid search for the alpha parameter of a linear regression using cross validation with the poly 2 features of the diabetes data. Use the Scikit-Learn class GridSearchCV.
+
+
+```{r}
+
+fitControl <- trainControl(method = "cv", number = 5)
+
+
+training_curve_cv <- data.table()
+
+for (a in seq(0,1, length.out = 100)) {
+  
+  loop_lm_dia = caret::train(target ~ ., method = "glmnet", data = train,
+                             trControl = fitControl,
+                            tuneGrid = expand.grid(alpha = a, lambda = 1))
+  
+  fitted <- predict(loop_lm_dia)
+  predicted <- predict(loop_lm_dia, validation)
+
+  loop_train_rmse <- rmse(train$target, fitted)
+  loop_val_rmse <- rmse(validation$target, predicted)
+  
+  training_curve_cv <- rbind(training_curve_cv, data.table(alpha = a,  train_rmse = loop_train_rmse, val_rmse = loop_val_rmse))
+}
+
+head(training_curve_cv)
+
+```
+
+```{r}
+
+data.table::melt(training_curve_cv, "alpha", c("train_rmse", "val_rmse")) %>%
+ ggplot() +
+  geom_line(aes(alpha, value,  color = variable)) 
+
+```
+
+```{r}
+
+head(training_curve_cv[order(-val_rmse)],1)
+
+```
+
+Through a nested grid search we can find the value of α that yields the best model performance on the given data. To notice how the model performance varies on the splits (look at *split2*) which highlights how training and testing a model is a complex matter, where all the moving parts can have a significant impact on the final result. E.g., if we tested this model on different splits, would we always get the same optimal α?
+
+
+### Exercise 4
+
+Load the California Housing dataset (either with sklearn.datasets.fetch_california_housing or from here ) and predict the house price (as a regression). Use different models, expand the features, tune the hyper-parameters, select the best model and estimate its performance on new data. Justify the choices or methods and models.
+
+
+```{r}
+
+cali = readr::read_csv('../../data/diabetes.csv',
+                           show_col_types = FALSE)
+
+head(cali)
+
+```
+
+```{r}
+
+dt <- cali %>% data.table()
+y <- dt[["target"]]
+
+train_test_index <- caret::createDataPartition(y, times = 1, p = 0.7)
+
+train_cali <- dt[ train_test_index$Resample1,]
+test_init  <- dt[-train_test_index$Resample1,]
+
+y_test <- test_init[["target"]]
+
+test_val_index <- caret::createDataPartition(y_test, times = 1, p = 0.5)
+
+test_cali <- test_init[ test_val_index$Resample1,]
+validation_cali  <- test_init[-test_val_index$Resample1,]
+
+base::rm(train_test_index,test_val_index, test_init, y_test, y, dt)
+
+```
+
+```{r}
+
+train_cali_sc <- data.table(scale(train_cali[, !c("target")]))[, target := train$target] 
+  
+test_cali_sc <- data.table(scale(test_cali[, !c("target")]))[, target := test$target] 
+
+val_cali_sc <- data.table(scale(validation_cali[, !c("target")]))[, target := validation$target] 
+
+```
+
+
+Models Training
+
+Let us compare a few regression models:
+
+    Ordinary least squares (OLS)
+    Lasso
+    Ridge
+    Decision tree
+    Multi-layer perceptron (MLP)
+
+We fit and train a "vanilla" version of the models on the data. No hyperparameters tuning, no expanded features, all very basic for now:
+
+```{r}
+
+fitControl <- trainControl(method = "none")
+
+lm_cali = caret::train(target ~ ., method = "lm", data = train_cali_sc, trControl = fitControl)
+
+lasso_cali = caret::train(target ~ ., method = "glmnet", data = train_cali_sc, trControl = fitControl,
+                          tuneGrid = expand.grid(alpha = 1, lambda = 1))
+
+ridge_cali = caret::train(target ~ ., method = "glmnet", data = train_cali_sc, trControl = fitControl,
+                          tuneGrid = expand.grid(alpha = 0, lambda = 1))
+
+dt_cali = caret::train(target ~ ., method = "rpart2", data = train_cali_sc, trControl = fitControl)
+
+mlp_cali = caret::train(target ~ ., method = "mlp", data = train_cali_sc, trControl = fitControl)
+
+
+print(paste("OLS (LM) RMSE: Train = ", round(rmse(train_cali_sc$target, predict(lm_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(lm_cali, test_cali_sc)),2)))
+
+print(paste("Ridege RMSE: Train = ", round(rmse(train_cali_sc$target, predict(ridge_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(ridge_cali, test_cali_sc)),2)))
+
+print(paste("Lasso RMSE: Train = ", round(rmse(train_cali_sc$target, predict(lasso_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(lasso_cali, test_cali_sc)),2)))
+
+print(paste("Decision Tree RMSE: Train = ", round(rmse(train_cali_sc$target, predict(dt_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(dt_cali, test_cali_sc)),2)))
+
+print(paste("MLP RMSE: Train = ", round(rmse(train_cali_sc$target, predict(mlp_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(mlp_cali, test_cali_sc)),2)))
+
+```
+
+We notice how the MLP was the best peformer in this scenario. Also interesting to see how the decision tree perfectly fitted the training data (trees tend to overfit if not tuned).
+
+### Models training on polynomial features
+
+Let us expand the features:
+
+
+``` {r}
+
+train_cali_sc_poly <- 
+  cbind(scale(train_cali[, !c("target")]), polym(train_sc_mat, degree = 2, raw = TRUE)) %>%
+  data.table() %>%
+  .[, target := train$target] %>%
+  na.omit()
+
+test_cali_sc_poly <- 
+  cbind(scale(test_cali[, !c("target")]), polym(test_sc_mat, degree = 2, raw = TRUE)) %>%
+  data.table() %>%
+  .[, target := test$target] %>%
+  na.omit()
+
+val_cali_sc_poly <- 
+  cbind(scale(validation_cali[, !c("target")]), polym(val_sc_mat, degree = 2, raw = TRUE)) %>%
+  data.table() %>%
+  .[, target := validation$target] %>%
+  na.omit()
+
+#Updates 
+colnames(train_cali_sc_poly) <- make.names(colnames(train_cali_sc_poly))
+colnames(test_cali_sc_poly) <- make.names(colnames(test_cali_sc_poly))
+colnames(val_cali_sc_poly) <- make.names(colnames(val_cali_sc_poly))
+
+```
+
+
+
+```{r, warning=FALSE}
+
+fitControl <- trainControl(method = "none")
+
+lm_cali = caret::train(target ~ ., method = "lm", data = train_cali_sc_poly, trControl = fitControl)
+
+lasso_cali = caret::train(target ~ ., method = "glmnet", data = train_cali_sc_poly, trControl = fitControl,
+                          tuneGrid = expand.grid(alpha = 1, lambda = 1))
+
+ridge_cali = caret::train(target ~ ., method = "glmnet", data = train_cali_sc_poly, trControl = fitControl,
+                          tuneGrid = expand.grid(alpha = 0, lambda = 1))
+
+dt_cali = caret::train(target ~ ., method = "rpart", data = train_cali_sc_poly, trControl = fitControl)
+
+mlp_cali = caret::train(target ~ ., method = "mlp", data = train_cali_sc_poly, trControl = fitControl)
+
+
+print(paste("OLS (LM) RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(lm_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(lm_cali, test_cali_sc_poly)),2)))
+
+print(paste("Ridege RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(ridge_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(ridge_cali, test_cali_sc_poly)),2)))
+
+print(paste("Lasso RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(lasso_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(lasso_cali, test_cali_sc_poly)),2)))
+
+print(paste("Decision Tree RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(dt_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(dt_cali, test_cali_sc_poly)),2)))
+
+print(paste("MLP RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(mlp_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(mlp_cali, test_cali_sc_poly)),2)))
+
+```
+
+
+Above we can see how the linear models respond well to training on the polynomial features, altough they overfit the data more heavily and will require more extensive hyperparameter tuning to transfer that learning to the test data. Differently, MLP (non-linear) does not like that features engineering at all...
+
+By looking at the above results, in accordance with the theory, we can try and optimize the linear models (OLS, Lasso and Ridge) on the polynomial features and the non-linear models (Decision Tree and MLP on the original features):
+Models fine tuning
+
+We set the hyperparameters space for each model:
+
+```{r}
+
+fit_control_rep_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
+
+ridge_cali_cv = caret::train(target ~ ., method = "glmnet", data = train_cali_sc_poly, trControl = fit_control_rep_cv,
+                          tuneGrid = expand.grid(alpha = seq(0, 0.5, length.out = 10), lambda = 1))
+
+lasso_cali_cv = caret::train(target ~ ., method = "glmnet", data = train_cali_sc_poly, trControl = fit_control_rep_cv,
+                          tuneGrid = expand.grid(alpha = seq(0.5, 1, length.out = 10), lambda = 1))
+
+dt_cali_cv = caret::train(target ~ ., method = "rpart2", data = train_cali_sc, 
+                          trControl = fit_control_rep_cv,
+                          tuneGrid = expand.grid(maxdepth = 1:10))
+
+mlp_cali_cv = caret::train(target ~ ., method = "mlp", data = train_cali_sc, 
+                          trControl = fit_control_rep_cv,
+                          tuneGrid = expand.grid(size = 1:10))
+
+print(paste("Ridge Best Tune: alpha = ", ridge_cali_cv$bestTune[[1]]))
+
+print(paste("Lasso Best Tune: alpha = ", lasso_cali_cv$bestTune[[1]]))
+
+print(paste("Decision Tree Best Tune: max depth = ", dt_cali$bestTune[[1]]))
+
+print(paste("MLP Best Tune: hidden units = ", mlp_cali$bestTune[[1]]))
+
+```
+
+Note: Caret will automatically predict from optimised model, so there is no need to recreate it. 
+
+```{r}
+
+print(paste("Ridge RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(ridge_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(ridge_cali_cv, test_cali_sc_poly)),2)))
+
+print(paste("Lasso RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(lasso_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(lasso_cali_cv, test_cali_sc_poly)),2)))
+
+print(paste("Decision Tree RMSE: Train = ", round(rmse(train_cali_sc$target, predict(dt_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(dt_cali_cv, test_cali_sc)),2)))
+
+print(paste("MLP RMSE: Train = ", round(rmse(train_cali_sc$target, predict(mlp_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(mlp_cali_cv, test_cali_sc)),2)))
+
+
+```
+
+### Models Comparison
+
+If we compare the above results to first ones we obtained from the vanilla models on the standard features we can see how we managed to lower the error on the test set for each model!
+Below we re-write some code to facilitate the comparison bertween the untuned and tuned models (results may vary when re-running the code):
+
+
+```{r, warning=FALSE}
+
+print("--- Untuned Models ---")
+print(paste("OLS (LM) RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(lm_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(lm_cali, test_cali_sc_poly)),2)))
+
+print(paste("Ridege RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(ridge_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(ridge_cali, test_cali_sc_poly)),2)))
+
+print(paste("Lasso RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(lasso_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(lasso_cali, test_cali_sc_poly)),2)))
+
+print(paste("Decision Tree RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(dt_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(dt_cali, test_cali_sc_poly)),2)))
+
+print(paste("MLP RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(mlp_cali)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(mlp_cali, test_cali_sc_poly)),2)))
+
+print("--- Tuned Models ---")
+
+print(paste("Ridge RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(ridge_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(ridge_cali_cv, test_cali_sc_poly)),2)))
+
+print(paste("Lasso RMSE: Train = ", round(rmse(train_cali_sc_poly$target, predict(lasso_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc_poly$target, predict(lasso_cali_cv, test_cali_sc_poly)),2)))
+
+print(paste("Decision Tree RMSE: Train = ", round(rmse(train_cali_sc$target, predict(dt_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(dt_cali_cv, test_cali_sc)),2)))
+
+print(paste("MLP RMSE: Train = ", round(rmse(train_cali_sc$target, predict(mlp_cali_cv)),2), 
+            "Test = ", round(rmse(test_cali_sc$target, predict(mlp_cali_cv, test_cali_sc)),2)))
+
+```
+
+## Exercise 5
+
+Load the Temperature Prediction Bias dataset from https://archive.ics.uci.edu/ml/datasets/Bias+correction+of+numerical+prediction+model+temperature+forecast and predict the the difference between predicted and actual next day temperatures. Model this regression problem with different models and determine their optimal hyper-parameters, select the best model and estimate its performance on new data. Justify the choices or methods and models.
+
+This exercise is similar to the previous one so we will use the same logic:
+
+    We will prepare the data
+    Train the vanilla models
+    Tune the models
+    Compare the results
+
+
+```{r}
+
+temp <- readr::read_csv('https://archive.ics.uci.edu/ml/machine-learning-databases/00514/Bias_correction_ucl.csv', 
+                        show_col_types = FALSE)
+
+head(temp)
+
+```
+
+```{r}
+
+sapply(temp, function(x) sum(is.na(x)))
+
+```
+
+```{r}
+
+temp_cln <- data.table(na.omit(temp))
+
+```
+
+Data Preparation
+
+We start by taking care of the Date column. There are many ways to deal with dates in ML problems and depending on the data, problem, and degree of precision required these can be more or less involved. In this exercise we will use one of the simplest approaches and just convert the dates to ordinal numbers:
+
+```{r}
+
+temp_ord <- temp_cln[, dte_ord := as.integer(Date)]
+
+```
+
+```{r}
+
+
+train_temp <- temp_ord[dte_ord <= floor(quantile(unique(temp_ord$dte_ord), 0.7))]
+test_temp <- temp_ord[dte_ord > floor(quantile(unique(temp_ord$dte_ord), 0.7))]
+
+print(paste("Train Rows: ", nrow(train_temp)))
+print(paste("Test Rows: ", nrow(test_temp)))
+
+```
+
+```{r}
+
+train_temp_sc <- data.table(scale(train_temp[, !c("Date", "dte_ord", "Next_Tmax", "Next_Tmin")]))  %>%
+  .[, dte_ord := train_temp$dte_ord] %>%
+  .[, Next_Tmax := train_temp$Next_Tmax] %>%
+  .[, Next_Tmin := train_temp$Next_Tmin]
+
+test_temp_sc <- data.table(scale(test_temp[, !c("Date", "dte_ord", "Next_Tmax", "Next_Tmin")])) %>%
+  .[, dte_ord := test_temp$dte_ord] %>%
+  .[, Next_Tmax := test_temp$Next_Tmax] %>%
+  .[, Next_Tmin := test_temp$Next_Tmin]
+  
+
+colnames(train_temp_sc) <- make.names(colnames(train_temp_sc))
+colnames(test_temp_sc) <- make.names(colnames(test_temp_sc))
+
+```
+
+Models Training
+
+Let us compare a few regression models:
+
+Ordinary least squares (OLS) Lasso Ridge Decision tree Multy-layer perceptron (MLP) We fit and train a "vanilla" version of the models on the data. No hyperparameters tuning, no expanded features, all very basic for now.
+Note the use of MultiOutputRegressor() to wrap our models and make them support multi-target regression:
+
+```{r, warning=FALSE}
+
+targets <- c("Next_Tmax", "Next_Tmin")
+
+fit_control_rep_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
+
+temp_models <- list()
+
+for (t in targets) {
+  
+  print(paste(t, "Standard Train"))
+  
+  col_remove <- c("dte_ord", targets[!targets %in% t])
+  
+  loop_train <- train_temp_sc[, !..col_remove]
+  
+  loop_test <- test_temp_sc[, !..col_remove]
+  
+  #Models
+  target_formula <- as.formula(paste0(t, " ~ ."))
+  
+  temp_models[[paste0(t, "_ridge")]] <- caret::train(
+    target_formula,
+    method = "glmnet",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(alpha = seq(0, 0.5, length.out = 10), lambda = 1)
+  )
+  
+  temp_models[[paste0(t, "_lasso")]] <- caret::train(
+    target_formula,
+    method = "glmnet",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(alpha = seq(0.5, 1, length.out = 10), lambda = 1)
+  )
+  
+  temp_models[[paste0(t, "_dt")]] <- caret::train(
+    target_formula,
+    method = "rpart2",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(maxdepth = 1:9)
+  )
+  
+  temp_models[[paste0(t, "_mlp")]] <- caret::train(
+    target_formula,
+    method = "mlp",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(size = 1:10)
+  )
+
+  
+  print(paste("Ridge RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_ridge")]]$results) %>% 
+    .[alpha == temp_models[[paste0(t, "_ridge")]]$bestTune$alpha & 
+        lambda == temp_models[[paste0(t, "_ridge")]]$bestTune$lambda] %>%
+    .[["RMSE"]],2))) 
+
+  print(paste("Lasso RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_lasso")]]$results) %>% 
+    .[alpha == temp_models[[paste0(t, "_lasso")]]$bestTune$alpha & 
+        lambda == temp_models[[paste0(t, "_lasso")]]$bestTune$lambda] %>%
+    .[["RMSE"]],2))) 
+  
+  print(paste("Decision Tree RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_dt")]]$results) %>% 
+    .[maxdepth == temp_models[[paste0(t, "_dt")]]$bestTune$maxdepth] %>%
+    .[["RMSE"]],2))) 
+  
+  print(paste("MLP RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_mlp")]]$results) %>% 
+    .[size == temp_models[[paste0(t, "_mlp")]]$bestTune$size] %>%
+    .[["RMSE"]],2))) 
+  
+  print(paste("Ridge RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_ridge")]], loop_test)),2)))
+  
+  print(paste("Lasso RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_lasso")]], loop_test)),2)))
+  
+  print(paste("Decision Tree RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_dt")]], loop_test)),2)))
+  
+  print(paste("MLP RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_mlp")]], loop_test)),2)))
+        
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_ridge")]], newdata = loop_train[1, !..t]),2),
+              "Actual:", loop_train[1, ..t]))
+  
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_lasso")]], newdata = loop_train[1, !..t]),2),
+        "Actual:", loop_train[1, ..t]))
+  
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_dt")]], newdata = loop_train[1, !..t]),2),
+        "Actual:", loop_train[1, ..t]))
+  
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_mlp")]], newdata = loop_train[1, !..t]),2),
+        "Actual:", loop_train[1, ..t]))
+  
+}
+
+
+```
+
+Note how the models now make a double prediction (i.e., on Next_Tmax, Next_Tmin):
+
+Let us expand the features for the linear models:
+
+
+```{r, warning=FALSE}
+
+targets <- c("Next_Tmax", "Next_Tmin")
+
+fit_control_rep_cv <- trainControl(method = "repeatedcv", number = 5, repeats = 2)
+
+temp_models <- list()
+
+for (t in targets) {
+  
+  print(paste(t, "Linear Polynomial Train"))
+  
+  col_remove <- c("dte_ord", targets[!targets %in% t])
+  
+  loop_train <- train_temp_sc[, !..col_remove]
+  
+  loop_test <- test_temp_sc[, !..col_remove]
+  
+  target_formula <- as.formula(paste0(t, " ~ ."))
+  
+  #This section adds the polynomial features
+    #Due to memory constraints some of the less important features are filtered out
+    #Using a decision tree with features importance selections
+  
+  var_model <- caret::train(
+    target_formula,
+    method = "rpart2",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(maxdepth = 1:9)
+  )
+  
+  vars <-
+    data.table(
+      features = rownames(varImp(var_model)$importance),
+      imp = varImp(var_model)$importance$Overall
+    ) %>%
+    .[imp > 0]
+
+  cols <- vars$features
+
+  loop_train_sml <-
+    loop_train %>%
+    .[, ..cols]
+
+  loop_train_poly <- polym(as.matrix(loop_train_sml), degree = 2, raw = TRUE) %>%
+    data.table()
+
+  colnames(loop_train_poly) <- make.names(names(loop_train_poly))
+  
+  loop_train_poly <- cbind(loop_train, loop_train_poly)
+  
+  #Test set
+  loop_test_sml <-
+    loop_test %>%
+    .[, ..cols]
+
+  loop_test_poly <- polym(as.matrix(loop_test_sml), degree = 2, raw = TRUE) %>%
+    data.table()
+
+  colnames(loop_test_poly) <- make.names(names(loop_test_poly))
+
+  loop_test_poly <- cbind(loop_test, loop_test_poly)
+  
+  #Models
+  
+  temp_models[[paste0(t, "_ridge")]] <- caret::train(
+    target_formula,
+    method = "glmnet",
+    data = loop_train_poly,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(alpha = seq(0, 0.5, length.out = 10), lambda = 1)
+  )
+  
+  temp_models[[paste0(t, "_lasso")]] <- caret::train(
+    target_formula,
+    method = "glmnet",
+    data = loop_train_poly,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(alpha = seq(0.5, 1, length.out = 10), lambda = 1)
+  )
+  
+  temp_models[[paste0(t, "_dt")]] <- caret::train(
+    target_formula,
+    method = "rpart2",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(maxdepth = 1:9)
+  )
+  
+  temp_models[[paste0(t, "_mlp")]] <- caret::train(
+    target_formula,
+    method = "mlp",
+    data = loop_train,
+    trControl = fit_control_rep_cv,
+    tuneGrid = expand.grid(size = 1:10)
+  )
+
+  
+  print(paste("Ridge RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_ridge")]]$results) %>% 
+    .[alpha == temp_models[[paste0(t, "_ridge")]]$bestTune$alpha & 
+        lambda == temp_models[[paste0(t, "_ridge")]]$bestTune$lambda] %>%
+    .[["RMSE"]],2))) 
+
+  print(paste("Lasso RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_lasso")]]$results) %>% 
+    .[alpha == temp_models[[paste0(t, "_lasso")]]$bestTune$alpha & 
+        lambda == temp_models[[paste0(t, "_lasso")]]$bestTune$lambda] %>%
+    .[["RMSE"]],2))) 
+  
+  print(paste("Decision Tree RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_dt")]]$results) %>% 
+    .[maxdepth == temp_models[[paste0(t, "_dt")]]$bestTune$maxdepth] %>%
+    .[["RMSE"]],2))) 
+  
+  print(paste("MLP RMSE: Train = ", round(
+    data.table(temp_models[[paste0(t, "_mlp")]]$results) %>% 
+    .[size == temp_models[[paste0(t, "_mlp")]]$bestTune$size] %>%
+    .[["RMSE"]],2))) 
+  
+  print(paste("Ridge RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_ridge")]], loop_test_poly)),2)))
+  
+  print(paste("Lasso RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_lasso")]], loop_test_poly)),2)))
+  
+  print(paste("Decision Tree RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_dt")]], loop_test)),2)))
+  
+  print(paste("MLP RMSE: Test =", round(rmse(loop_test[[t]], predict(temp_models[[paste0(t, "_mlp")]], loop_test)),2)))
+        
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_ridge")]], newdata = loop_train_poly[1, !..t]),2),
+              "Actual:", loop_train[1, ..t]))
+  
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_lasso")]], newdata = loop_train_poly[1, !..t]),2),
+        "Actual:", loop_train[1, ..t]))
+  
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_dt")]], newdata = loop_train[1, !..t]),2),
+        "Actual:", loop_train[1, ..t]))
+  
+  print(paste(t, "Pred:", round(predict(temp_models[[paste0(t, "_mlp")]], newdata = loop_train[1, !..t]),2),
+        "Actual:", loop_train[1, ..t]))
+  
+}
+
+
+```

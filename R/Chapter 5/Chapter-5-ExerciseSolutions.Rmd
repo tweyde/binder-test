@@ -1,0 +1,129 @@
+---
+title: "Chapter-5-ExcerciseSolutions"
+output: html_document
+date: "2022-10-10"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, GGally)
+
+```
+
+1. Consider an election with 5 candidates and 1000 voters. Assumed that the voters cast their vote randomly, what is the probability that there will be a tie for the first position?
+
+```{r}
+
+candidates = 1:5
+prob <- rep(0.2, 5)
+votes <- 1000 
+trials <- 10000
+tie <- vector()
+
+for (t in 1:trails) {
+  
+  s <- sample(x = candidates, size = votes, replace = T, prob = prob) %>% 
+  data.table() %>%
+  .[, .N, by = "."] %>%
+  .[order(-N)]
+
+  eq <- s[1, .(N)][[1]] == s[2, .(N)][[1]]
+  
+  tie <- append(tie, eq) 
+
+}
+
+sum(tie[tie == TRUE]) / trials
+
+```
+
+
+2. Throw two dice. What is the probability that the difference between them is 1, 2, or 3? #needs further clarification
+
+```{r}
+
+diedomain <- 1:6
+dieprob <- rep(1/6,6)
+
+trails <- 10000
+
+die1 <- sample(x = diedomain, size = trails, replace = T, prob = dieprob)
+die2 <- sample(x = diedomain, size = trails, replace = T, prob = dieprob)
+
+diffs <- abs(die1 - die2)
+
+prob_estimate = length(diffs[(diffs >= 1) & (diffs <= 3)]) / trails
+prob_estimate
+```
+
+3. Given that a throw of three dice show three different faces, what is the probability that the sum of all the three digits is 11.
+
+```{r}
+
+diedomain <- 1:6
+dieprob <- rep(1/6,6)
+
+trials <- 10000
+
+die1 <- sample(x = diedomain, size = trails, replace = T, prob = dieprob)
+die2 <- sample(x = diedomain, size = trails, replace = T, prob = dieprob)
+die3 <- sample(x = diedomain, size = trails, replace = T, prob = dieprob)
+
+# prob three die show different faces
+prob_b <- sum((die1 != die2) & (die2 != die3) & (die1 != die3)) / trials
+
+# prob three die show different faces and sum to 11
+prob_a_and_b <- sum((die1 != die2) & (die2 != die3) & (die1 != die3) &
+                   (die1 + die2 + die3) == 11) / trials
+
+# p(a|b) = p(a and b)/p(b)
+(prob_a_given_b = prob_a_and_b / prob_b)
+
+```
+
+Q4. It's 1000 >0 but is it worth to invest? decision theory?
+
+
+```{r}
+
+# Let X be the random variable the profit obtained on the day of the golf tournament
+# X takes value (0 - 20000) -20000 with probability 0.3, X takes value (30000 - 20000) 10000 with probability 0.7 
+# expected value of X is (and so expected profit)
+-20000 * 0.3 + 10000 * 0.7
+
+```
+
+Q5. std 3 -> overflood? a) cumulative dif, probability norm(X <= 345), b) probability of success is binomial distribution(a, n=100), c), d)inversed cumulative distribution
+
+```{r}
+# A) cdf of normal. let a = norm(X <= 345)
+# B) let X be the number of bottles having less than 345ml in a set of n bottles
+# X follows the binomial distribution binom(p=a, n=100)
+# calculate p(X < 10) = p(X <= 9) using cumulative distribution of binomial dist
+# C) let X be the random variable denoting the number of ml in a bottle. 
+# X follows a normal distribution N(348, 9) and has a cumulative distribution F
+# Want x such that F(x) == 0.99, so use inverse cumulative distribution F-1(0.99)
+```
+
+Q6. Poisson distribution cares only the times of event
+
+```{r}
+
+# Let X be the random variable denoting the number of accidents that occur in an
+# average week. X follows a poisson Distribution Poisson(lambda = 4)
+# Want P(X > 5) = 1 - P(X <=5) = 1 - F(5) where F is the cumulative distribution
+# function of the poisson distribution
+
+```
+

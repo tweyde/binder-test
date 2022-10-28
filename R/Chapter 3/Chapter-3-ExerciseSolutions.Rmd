@@ -1,0 +1,139 @@
+---
+title: "Chapter-3-ExerciseSolutions"
+output: html_document
+date: "2022-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally)
+
+```
+
+```{r}
+
+gapminder = data.table(readr::read_csv('../../data/gapminder.csv', show_col_types = FALSE))
+
+head(gapminder)
+
+```
+
+1. How many countries start with the letter A?
+
+```{r}
+
+unique(gapminder[substr(country, 1, 1) == "A", .(country)])
+
+```
+
+2. List all the countries and years when the life expectancy exceeded 70 years 
+
+```{r}
+
+unique(gapminder[lifeExp > 70, .(country)])
+
+```
+
+3. Create a variable termed 𝐭𝐨𝐭𝐚𝐥𝐆𝐃𝐏 which is the product of average GDP per capita (𝐠𝐝𝐩𝐏𝐞𝐫𝐜𝐚𝐩) and population 𝐩𝐨𝐩. Compute the sum of the 𝐭𝐨𝐭𝐚𝐥𝐆𝐃𝐏 for each year and plot it. What does the plot reveal?
+
+```{r}
+
+total_gdp <- 
+  gapminder %>%
+  .[, totalGDP := gdpPercap * pop] %>%
+  .[, .(totalGDP_Trillion = sum(totalGDP) / (1*10^12)), 
+    by = "year"]
+
+total_gdp
+```
+
+```{r}
+
+ggplot(total_gdp) +
+  geom_point(aes(year, totalGDP_Trillion)) +
+  geom_smooth(aes(year, totalGDP_Trillion), 
+              method = "lm", se = FALSE)
+
+```
+
+4. For each continent, compute the average life expectancy, average GDP per capita, and the average population over the years. Create an appropriate plot to visualize the data.
+
+```{r}
+
+avg_stat <- gapminder[, .(lifeExp = mean(lifeExp), 
+                          gdpPercap = mean(gdpPercap),
+                          popMl = round(mean(pop) / 1000000,2)), 
+                      by = c("continent", "year")] %>%
+  .[order(continent)]
+
+avg_stat
+```
+
+```{r}
+
+p1 <- ggplot(avg_stat) +
+  geom_point(aes(x = year, y = lifeExp)) +
+  facet_grid(cols = vars(continent)) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+p2 <- ggplot(avg_stat) +
+  geom_point(aes(x = year, y = gdpPercap)) +
+  facet_grid(cols = vars(continent)) +
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank())
+
+p3 <- ggplot(avg_stat) +
+  geom_point(aes(x = year, y = popMl)) +
+  facet_grid(cols = vars(continent)) +
+  scale_x_continuous(breaks = c(min(avg_stat$year),
+                                floor(median(avg_stat$year)),
+                                max(avg_stat$year))) +
+  theme(axis.text.x=element_text(angle = 45))
+
+p1 / p2 / p3
+
+```
+
+5. Calculate the total population for each continent for each year. Create an appropriate plot to visualize the data.
+
+```{r}
+
+cont_pop <- gapminder[, .(popBl = round(sum(pop) / (1*10^9),2)), 
+                      by = c("continent", "year")] %>%
+  .[order(continent)]
+
+cont_pop
+
+```
+
+```{r}
+
+ggplot(cont_pop) +
+  geom_point(aes(year, popBl)) +
+  facet_grid(cols = vars(continent)) +
+  theme(axis.text.x=element_text(angle = 45))
+
+```
+6. Reshape the data so that the years are listed in columns.
+
+
+```{r}
+
+dcast(cont_pop, continent ~ year, value.var = "popBl")
+
+```
+

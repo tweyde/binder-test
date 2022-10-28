@@ -1,0 +1,452 @@
+---
+title: "Chapter-16-ExerciseSolutions"
+output: html_document
+date: "2022-10-16"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally, tictoc)
+
+
+```
+
+```{r}
+head(iris)
+```
+
+
+## Exercise 1
+
+Implement your own version of train_test_split, so that it generates three sets (train, validation, test). You should accept two arguments, train_size and validation_size.
+You then need to internally determine the test_size.
+
+There would be many ways to resolve this problem. In this implementation we use the inputs to generate random indexes to slice the arrays (sampling) and return shuffled train, validation and test sets:
+
+Indexing, complemented by the use of masks to extract the 'not-indexes', is computationally efficient, as demonstrated below:
+
+```{r}
+#Standard method of data split
+train_test_val_split <- function(dat,
+                                 split_ratio_train_test = 0.7, 
+                                 split_ratio_test_val = 0.5) {
+  
+  #Train Test Split
+  smp_size <- floor(split_ratio_train_test * nrow(dat))
+  
+  ## set the seed to make your partition reproducible
+  train_ind <- sample(seq_len(nrow(dat)), size = smp_size)
+  
+  train <- dat[train_ind, ]
+  test_init <- dat[-train_ind, ]
+  
+  #Test Validation Split
+  smp_size_test <- floor(split_ratio_test_val * nrow(test_init))
+  
+  ## set the seed to make your partition reproducible
+  test_ind <- sample(seq_len(nrow(test_init)), size = smp_size_test)
+  
+  test <- test_init[test_ind, ]
+  validation <- test_init[-test_ind, ]
+  
+  return(list(train = train, test = test, validation = validation))
+  
+}
+
+#Masked Method of data split
+train_test_val_split_mask <- function(dat,
+                                 split_ratio_train_test = 0.7, 
+                                 split_ratio_test_val = 0.5) {
+
+  dat$index <- 1:nrow(dat)
+  
+  #Train Test Split
+  smp_size <- floor(split_ratio_train_test * nrow(dat))
+  
+  ## set the seed to make your partition reproducible
+  train_ind <- sample(seq_len(nrow(dat)), size = smp_size)
+  
+  train <- dat[dat$index %in% train_ind,]
+  test_init <- dat[!dat$index %in% train_ind,]
+  
+  #Test Validation Split
+  smp_size_test <- floor(split_ratio_test_val * nrow(test_init))
+  
+  ## set the seed to make your partition reproducible
+  test_ind <- sample(seq_len(nrow(test_init)), size = smp_size_test)
+  
+  test <- dat[dat$index %in% test_ind,]
+  validation <- dat[!dat$index %in% test_ind,]
+  
+  return(list(train = train, test = test, validation = validation))
+  
+}
+
+tictoc::tic("Non-Masked Split")
+splits <- train_test_val_split(dat = iris)
+tictoc::toc()
+
+tictoc::tic("Masked Split")
+splits_mask <- train_test_val_split_mask(dat = iris)
+tictoc::toc()
+
+```
+
+
+
+```{r}
+
+print(paste('Number of features for training', nrow(splits$train)))
+print(paste('Number of features for test', nrow(splits$test)))
+print(paste('Number of features for validation', nrow(splits$validation)))
+
+```
+
+Below we notice that, despite our dataset is originally balanced in its classes (33% of labels for each of the 3 target classes), in our test set we end up having just 4 samples of the first class, against 11 samples of class 2. This due to the randomness of our sampling, and usually something we would like to keep an eye on (or control) as it could negatively affect the learning of an algorithm.
+
+ 
+
+```{r}
+
+data.table(splits$test)[, .N, by = "Species"]
+
+```
+## Exercise 2
+
+What is a necessary condition for the arguments to the function created in exercise 1 to be valid? Implement a test and print an error message if the arguments are not valid.
+
+In our case, given the dataset, we want to make sure that the received inputs are data frames or tables, that their features and targets arrays are of the same length and that the inputs sizes would generate reasonable sets. We present how to handle these basic exceptions, but bear in mind that in a practical context (i.e., we wanted to use this function in production), where we may receive all sort of data, we would have to better handle data types and other unique exceptions.
+
+```{r}
+
+train_test_val_split_verify <- function(dat, 
+                                 split_ratio_train_test = 0.7, 
+                                 split_ratio_test_val = 0.5) {
+  
+  
+  if ((!is.data.frame(dat)) & (!is.data.table(dat))) {
+    warning("Data provided needs to be either a data frame or data table. ")
+    return(NULL)
+  }
+  
+  if ((split_ratio_train_test < 0) | (split_ratio_train_test > 1)) {
+    warning("Training to test ratio should be a value between 0 and 1.")
+    return(NULL)
+  }
+  
+  if ((split_ratio_test_val < 0) | (split_ratio_test_val > 1)) {
+    warning("Test to validation ratio should be a value between 0 and 1.")
+    return(NULL)
+  }
+  
+  dat$index <- 1:nrow(dat)
+  
+  #Train Test Split
+  smp_size <- floor(split_ratio_train_test * nrow(dat))
+  
+  ## set the seed to make your partition reproducible
+  train_ind <- sample(seq_len(nrow(dat)), size = smp_size)
+  
+  train <- dat[dat$index %in% train_ind,]
+  test_init <- dat[!dat$index %in% train_ind,]
+  
+  #Test Validation Split
+  smp_size_test <- floor(split_ratio_test_val * nrow(test_init))
+  
+  ## set the seed to make your partition reproducible
+  test_ind <- sample(seq_len(nrow(test_init)), size = smp_size_test)
+  
+  test <- dat[dat$index %in% test_ind,]
+  validation <- dat[!dat$index %in% test_ind,]
+  
+  return(list(train = train, test = test, validation = validation))
+  
+}
+
+names(train_test_val_split_verify(dat  = iris))
+
+```
+### Testing the errors
+
+Below we pass some 'wrong' arguments to the function and check its responses:
+
+
+```{r}
+train_test_val_split_verify(dat  = "hello")
+train_test_val_split_verify(dat  = iris, split_ratio_train_test = 2)
+train_test_val_split_verify(dat  = iris, split_ratio_test_val = 2)
+```
+
+## Exercise 3
+
+Implement train_test_split version with stratified sampling, i.e. sample such that you have an approximately equal distribution of class labels in each output set.
+
+In exercise 1 we saw that, by just randomly sample the data, we may create imbalances in the classes. In this exercise we build a function that deals with that and returns training, validation and test sets containing the same percentage of target class as in the dataset provided. We will use a slightly different approach in this case and start by creating a unique dataset containing features and targets.
+We also count the number of target classes (unique labels) and their percentage in the data:
+
+
+```{r}
+
+# let us start by creating one array with features and targets together
+# we count the number of unique classes (targets) we have
+n_classes <- length(unique(iris$Species))
+print(paste('Number of unique classes: ', n_classes))
+
+# return the number of instances per each class
+data_per_class = data.table(iris)[, .(ratio = .N / nrow(iris)), by = "Species"]
+
+data_per_class
+
+```
+
+Now that we have separated the classes (which in most cases will have a different number of samples), each one in one dataset, we can use the same train_size and validation_size to sample from those datasets, one at the time, and this will allow us to keep the same representation of classes we had in the original data (stratification).
+
+We append the setosa, viginica and versicolor samples to train_array, val_array, test_array, each class having its specific train, validation and test splits in each of these lists:
+
+```{r}
+
+list_classes <- split(iris, iris$Species)
+names(list_classes)
+
+```
+
+Now that we have separated the classes (which in most cases will have a different number of samples), each one in one dataset, we can use the same train_size and validation_size to sample from those datasets, one at the time, and this will allow us to keep the same representation of classes we had in the original data (stratification).
+
+We append the setosa, viginica and versicolor samples to train_array, val_array, test_array, each class having its specific train, validation and test splits in each of these lists:
+
+
+```{r}
+
+#apply the splitting across the classes
+stratified_splits <- lapply(list_classes, function(x) train_test_val_split_mask(x))
+
+#prepare the dataframes for the classes
+train_strat <- data.table()
+test_strat <- data.table()
+validation_strat <- data.table()
+
+for (s in stratified_splits) {
+  #print(s)
+  train_strat <- rbind(train_strat, s$train)
+  test_strat <- rbind(test_strat, s$test)
+  validation_strat <- rbind(validation_strat, s$validation)
+}
+
+print(paste('Number of features for training', nrow(train_strat)))
+print(paste('Number of features for test', nrow(test_strat)))
+print(paste('Number of features for validation', nrow(validation_strat)))
+
+print(train_strat[, .N, by = "Species"])
+print(test_strat[, .N, by = "Species"])
+print(validation_strat[, .N, by = "Species"])
+
+```
+
+### All together
+
+The above scripts result in the below function:
+
+```{r}
+
+train_test_val_split_all <- function(dat,
+                                 split_ratio_train_test = 0.7, 
+                                 split_ratio_test_val = 0.5) {
+  
+  #Create index of dataset
+    dat$index <- 1:nrow(dat)
+  
+  #Train Test Split
+    smp_size <- floor(split_ratio_train_test * nrow(dat))
+    
+    ## set the seed to make your partition reproducible
+    train_ind <- sample(seq_len(nrow(dat)), size = smp_size)
+    
+    train <- dat[dat$index %in% train_ind,]
+    test_init <- dat[!dat$index %in% train_ind,]
+  
+  #Test Validation Split
+    smp_size_test <- floor(split_ratio_test_val * nrow(test_init))
+    
+    ## set the seed to make your partition reproducible
+    test_ind <- sample(seq_len(nrow(test_init)), size = smp_size_test)
+    
+    test <- dat[dat$index %in% test_ind,]
+    validation <- dat[!dat$index %in% test_ind,]
+  
+  #Lists of splits
+  splits <- list(train = train, test = test, validation = validation)
+  
+  list_classes <- split(iris, iris$Species)
+  
+  #prepare the dataframes for the classes
+  train_strat <- data.table()
+  test_strat <- data.table()
+  validation_strat <- data.table()
+  
+  for (s in stratified_splits) {
+    #print(s)
+    train_strat <- rbind(train_strat, s$train)
+    test_strat <- rbind(test_strat, s$test)
+    validation_strat <- rbind(validation_strat, s$validation)
+  }
+  
+  return(list(train = train_strat, test = test_strat, validation = validation_strat))
+  
+}
+
+list_all <- train_test_val_split_all(dat = iris)
+
+
+print(list_all$train[, .N, by = "Species"])
+print(list_all$test[, .N, by = "Species"])
+print(list_all$validation[, .N, by = "Species"])
+
+```
+
+### Our final function
+
+This is the final train_test_split function with stratification and (some) errors handling:
+
+
+```{r}
+
+train_test_val_split_all <- function(dat,
+                                 split_ratio_train_test = 0.7, 
+                                 split_ratio_test_val = 0.5) {
+  
+  #Error checking
+    if ((!is.data.frame(dat)) & (!is.data.table(dat))) {
+      warning("Data provided needs to be either a data frame or data table. ")
+      return(NULL)
+    }
+    
+    if ((split_ratio_train_test < 0) | (split_ratio_train_test > 1)) {
+      warning("Training to test ratio should be a value between 0 and 1.")
+      return(NULL)
+    }
+    
+    if ((split_ratio_test_val < 0) | (split_ratio_test_val > 1)) {
+      warning("Test to validation ratio should be a value between 0 and 1.")
+      return(NULL)
+    }
+  
+  #Create index of dataset
+    dat$index <- 1:nrow(dat)
+  
+  #Train Test Split
+    smp_size <- floor(split_ratio_train_test * nrow(dat))
+    
+    ## set the seed to make your partition reproducible
+    train_ind <- sample(seq_len(nrow(dat)), size = smp_size)
+    
+    train <- dat[dat$index %in% train_ind,]
+    test_init <- dat[!dat$index %in% train_ind,]
+  
+  #Test Validation Split
+    smp_size_test <- floor(split_ratio_test_val * nrow(test_init))
+    
+    ## set the seed to make your partition reproducible
+    test_ind <- sample(seq_len(nrow(test_init)), size = smp_size_test)
+    
+    test <- dat[dat$index %in% test_ind,]
+    validation <- dat[!dat$index %in% test_ind,]
+  
+  #Lists of splits
+  splits <- list(train = train, test = test, validation = validation)
+  
+  list_classes <- split(iris, iris$Species)
+  
+  #prepare the dataframes for the classes
+  train_strat <- data.table()
+  test_strat <- data.table()
+  validation_strat <- data.table()
+  
+  for (s in stratified_splits) {
+    #print(s)
+    train_strat <- rbind(train_strat, s$train)
+    test_strat <- rbind(test_strat, s$test)
+    validation_strat <- rbind(validation_strat, s$validation)
+  }
+  
+  return(list(train = train_strat, test = test_strat, validation = validation_strat))
+  
+}
+
+list_all <- train_test_val_split_all(dat = iris)
+
+
+print(list_all$train[, .N, by = "Species"])
+print(list_all$test[, .N, by = "Species"])
+print(list_all$validation[, .N, by = "Species"])
+
+```
+
+### Useful Packages
+
+Note: Caret and caTools should stratify classes by default so can be simpler to implement. In addition, caTools is slightly quicker since it uses masking. 
+
+```{r}
+
+train_test_val_split_caret <- function(dat, y_name,
+                                 split_ratio_train_test = 0.7,
+                                 split_ratio_test_val = 0.5) {
+
+  dt <- dat %>% data.table()
+  y <- dt[[y_name]]
+
+  train_test_index <- caret::createDataPartition(y, times = 1, p = split_ratio_train_test)
+
+  train <- dt[ train_test_index$Resample1,]
+  test_init  <- dt[-train_test_index$Resample1,]
+
+  y_test <- test_init[[y_name]]
+
+  test_val_index <- caret::createDataPartition(y_test, times = 1, p = split_ratio_test_val)
+
+  test <- test_init[ test_val_index$Resample1,]
+  validation  <- test_init[-test_val_index$Resample1,]
+
+  return(list(train = train, test = test, validation = validation))
+
+}
+
+
+train_test_val_split_mask_ca <- function(dat, y_name,
+                                 split_ratio_train_test = 0.7,
+                                 split_ratio_test_val = 0.5) {
+
+  sample <- caTools::sample.split(dat[[y_name]], SplitRatio = split_ratio_train_test)
+
+  train <- subset(dat, sample ==  TRUE)
+  test_init <- subset(dat, sample == FALSE)
+
+  sample_test <- caTools::sample.split(test_init, SplitRatio = split_ratio_test_val)
+
+  test <- subset(test_init, sample ==  TRUE)
+  validation <- subset(test_init, sample ==FALSE)
+
+  return(list(train = train, test = test, validation = validation))
+
+}
+
+tictoc::tic("Caret Split")
+splits <- train_test_val_split_caret(dat = iris, y_name = "Species")
+tictoc::toc()
+
+tictoc::tic("CA Split")
+splits_mask <- train_test_val_split_mask_ca(dat = iris, y_name = "Species")
+tictoc::toc()
+
+```
+
