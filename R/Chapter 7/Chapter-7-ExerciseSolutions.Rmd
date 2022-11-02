@@ -1,0 +1,88 @@
+---
+title: "Chapter-7-ExerciseSolutions"
+output: html_document
+date: "2022-11-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork)
+
+hl = data.table(readr::read_csv('../../data/Health.csv', show_col_types = FALSE))
+
+```
+
+Exercise 1
+
+Consider the Health.csv file. Conduct the following tests on the variable ofp (which captures the number of office visits by patients).
+
+a. Number of office visits is less than or equal to 5
+
+b. Number of office visits is more than or equal to 6
+
+c. Number of office visits is 5.5
+
+
+```{r}
+
+nrow(hl[ofp <= 5])
+
+```
+
+```{r}
+
+nrow(hl[ofp >= 5])
+
+```
+
+```{r}
+
+nrow(hl[ofp == 5.5])
+
+```
+
+2. Construct the 95% confidence interval for the average faminc (family income). What conclusion can you draw from it? 
+
+```{r}
+
+q1 = quantile(hl$faminc, c(.05/2,1-(.05/2)))
+output = paste0("[",q1[1],",",q1[2],"]")
+print(output)
+
+```
+```{r}
+
+plot(density(hl$faminc))
+abline(v = q1, col = "red")
+
+```
+
+Confidence interval has a very large range, which means that the average family income of the sample is very widely distributed (large income gap)
+
+3. Repeat problem 2, but this time compute the confidence interval for median family income.
+
+
+```{r}
+
+DescTools::MedianCI(hl$faminc)
+
+```
+
+4. Compute the 90% confidence interval for median age in the data. 
+
+```{r}
+
+DescTools::MedianCI(hl$age, conf.level = 0.9)
+
+```
+

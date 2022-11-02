@@ -1,0 +1,193 @@
+---
+title: "Chapter-8-ExerciseSolutions"
+output: html_document
+date: "2022-11-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork)
+
+hl = data.table(readr::read_csv('../../data/Health.csv', show_col_types = FALSE))
+
+cars = data.table(readr::read_csv('../../data/UsedCars2017.csv', show_col_types = FALSE))
+
+p_rtail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist>tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_ltail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x>tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist<tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_2tail = function(sampdist,tstat)
+  {
+hyp = mean(sampdist)  
+cutoff1 = hyp - abs(tstat-hyp)
+  cutoff2 = hyp + abs(tstat-hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<cutoff1 | df$temp.x>cutoff2
+  df1 = df[formula1,] 
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist<cutoff1 |  sampdist>cutoff2])/(length(sampdist))
+  return(pvalue)
+  }
+
+
+```
+
+```{r}
+head(hl)
+```
+
+
+1. There is a variable called faminc, which indicates the income of the family. Conduct a test for the median value of 1.75.
+
+
+
+1. Null Hypothesis :the median value is 1.75
+2. Since the family income values are numerical, we will assume they follow N(μ,σ) Since a normal distribution is always symmetric about the mean, its median value will be the same as its mean.
+
+```{r}
+
+print(paste("Median:",median(hl$faminc)))
+
+p_2tail(hl$faminc, 1.75)
+
+```
+p-value is largely above the threshold of 0.05, so the null hypothesis cannot be rejected.
+
+There is a variable called age. Assuming this follows an exponential distribution, test the hypothesis that the mean value of age is 7.5.
+
+Null Hypothesis :the meean value is 7.5
+
+Since the age values are numerical, we will assume they follow N(μ,σ) Since a normal distribution is always symmetric about the mean, its median value will be the same as its mean.
+
+```{r}
+
+print(paste("Median:",median(hl$age)))
+
+p_2tail(hl$age, 7.5)
+
+```
+p-value is slightly below the threshold of 0.05, so the null hypothesis is accepted.
+
+There are two variables named males and exclhlth. The first one refers to gender and the second to the health condition. Both variables have only two values 0 or 1. Conduct (a chi-square) test to see if these two variables are related. Note that the null hypothesis is that there is no relationship between the two.
+
+Null Hypothesis : there is no relationship between gender and health variables.
+
+
+```{r}
+
+table(hl[, .(male, exclhlth)])
+
+```
+
+```{r}
+
+chisq.test(hl$male, hl$exclhlth)
+
+```
+
+The two variables tend to be related, as the value is very low (0.21)
+
+```{r}
+
+head(cars)
+
+```
+
+
+4. Develop a test to evaluate the hypothesis that the population mean Price is the same as the population median Price. Hint: Assume a normal distribution for the population.
+
+```{r}
+
+mean(cars$Price)
+median(cars$Price)
+
+```
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:1000) {
+  sampdist <- append(sampdist, mean(rnorm(nrow(cars), mean = median(cars$Price), sd = sd(cars$Price))))
+}
+
+
+p_2tail(sampdist, mean(cars$Price))
+
+```
+
+5. Develop a test to evaluate the hypothesis that the population mean Price is 1.4 times the population standard deviation of Price. Hint: Assume a normal distribution for the population with standard deviation to be the same as the sample and the mean is 1.4 times the sample standard deviation.
+
+```{r}
+
+mean(cars$Price)
+sd(cars$Price)*1.4
+
+```
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:1000) {
+  sampdist <- append(sampdist, mean(rnorm(nrow(cars), mean = sd(cars$Price)*1.4, sd = sd(cars$Price))))
+}
+
+
+p_2tail(sampdist, mean(cars$Price))
+
+```
+
+
+6. Develop a test to evaluate the hypothesis that the population correlation between Age and Mileage is 0.9.
+
+```{r}
+
+samp_cor <- vector()
+
+age_sc <- scale(cars$Age)
+mil_sc <- scale(cars$Mileage)
+
+for (i in 1:1000) {
+  mnd <- MASS::mvrnorm(mu = c(0,0), Sigma = matrix(c(1,0.9,0.9,1), nrow = 2), n = nrow(cars))
+
+  samp_cor <- append(samp_cor,  cov(mnd[,1], mnd[,2]))
+}
+
+
+p_2tail(samp_cor, cor(age_sc, mil_sc)[[1]])
+
+```
+

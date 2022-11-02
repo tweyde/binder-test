@@ -1,0 +1,133 @@
+---
+title: "Chapter-6-ExerciseSolutions"
+output: html_document
+date: "2022-11-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, mvtnorm)
+```
+
+
+Consider the Transactions.csv file. Determine if the variables pens and pencils are independent. Find a pair of variables that are dependent. 
+```{r}
+
+tr = data.table(readr::read_csv('../../data/Transactions.csv', show_col_types = FALSE))
+head(tr)
+```
+
+```{r}
+
+table(tr$Pencils) / nrow(tr)
+
+```
+
+
+```{r}
+
+table(tr$Pens) / nrow(tr)
+
+```
+
+```{r}
+
+table(tr$Pencils, tr$Pens) / nrow(tr)
+
+```
+
+
+```{r}
+
+Lift = 0.008736/(0.134136*0.152378)
+print(Lift)
+
+
+```
+
+The Lift Value is 0.4274, which is very insignificant, therefore the two variables are linearly nondependent.
+
+Finding a pair of dependent variables Refer to textbook - Perfume and toothbrush
+
+2. Create a sample of size 1000 from a bivariate normal distribution where the two variables each have a mean of 15 and the correlation between the two is 0.6. Create a 3-d plot to visualize the data.
+
+```{r}
+M = c(13,17)
+S = matrix(c(1,0.6,0.6,1), nrow = 2)
+x = rmvnorm(10,mean = M,sigma = S)
+x
+```
+
+```{r}
+cov(x[,1], x[,2])
+
+```
+
+```{r}
+
+x = rmvnorm(1000,mean = M,sigma = S)
+y = kde2d(x = x[,1], y = x[,2])
+persp(y, col="green",theta = 30, phi = 30)
+
+
+```
+
+4. Create a sample of size 1000 from a bivariate normal distribution where the two variables each have a mean of 10 and the correlation between the two is –0.5. Transform the second variable by squaring it and create a 3-d plot to visualize the resulting distribution
+
+```{r}
+M = c(4,16)
+S = matrix(c(1,-0.5,-0.5,1), nrow = 2)
+x = rmvnorm(10,mean = M,sigma = S%*%S)
+y = kde2d(x = x[,1], y = x[,2])
+persp(y, col="green",theta = 30, phi = 30)
+
+
+```
+
+5. Simulate 500 samples from standard uniform distributions, with each sample containing 200 data points. Similarly, simulate 500 samples from standard lognormal distributions, with each sample containing 200 data points. Plot the empirical distribution of the sum of all these 1000 samples. Does it appear approximately normal?
+
+
+```{r}
+
+uniform <- matrix(runif(500))
+
+for (i in 1:200) {
+  uniform <- cbind(uniform, runif(500))
+}
+
+plot(density(uniform))
+```
+
+```{r}
+
+lognormal <- matrix(rlnorm(500))
+
+for (i in 1:200) {
+  lognormal <- cbind(lognormal, rlnorm(500))
+}
+
+plot(density(lognormal))
+```
+
+```{r}
+
+sample <- uniform + lognormal
+
+for (i in 1:200) {
+  sample <- cbind(sample, runif(500))
+}
+
+plot(density(sample))
+
+```
+

@@ -1,0 +1,387 @@
+---
+title: "Chapter-9-ExerciseSolutions"
+output: html_document
+date: "2022-11-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork)
+
+ad = data.table(readr::read_csv('../../data/admission.csv', show_col_types = FALSE))
+
+p_rtail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist>tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_ltail = function(sampdist,tstat)
+  {
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x>tstat
+  df1 = df[formula1,] 
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist<tstat])/(length(sampdist))
+  return(pvalue)
+  }
+
+p_2tail = function(sampdist,tstat)
+  {
+hyp = mean(sampdist)  
+cutoff1 = hyp - abs(tstat-hyp)
+  cutoff2 = hyp + abs(tstat-hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x<cutoff1 | df$temp.x>cutoff2
+  df1 = df[formula1,] 
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist<cutoff1 |  sampdist>cutoff2])/(length(sampdist))
+  return(pvalue)
+  }
+
+```
+
+```{r}
+
+head(ad)
+
+```
+
+
+1. Conduct a nonparametric test for the null hypothesis that the 75% percentile value of GMAT score is 600. 
+
+
+```{r}
+#1. State the Null hypothesis : 75% percentile is 600,
+#Step 2: Describe the data generation process and the population. 
+#Since the GMAT scores are numeric, we will assume they follow a normal distribution,
+qnorm(0.75)
+
+```
+
+```{r}
+
+newm <- 600 - (qnorm(0.75) * sd(ad$GMAT))
+
+newm
+
+```
+
+
+```{r}
+
+qnorm(0.75, mean = newm, sd = sd(ad$GMAT))
+
+```
+
+```{r}
+gmat_score <- 600
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- sample(c(0,1), size = nrow(ad), replace = T, prob = c(0.75, 0.25))
+  sampdist <- append(sampdist, sum(s1) / nrow(ad))
+  
+}
+
+df <- 
+  ad %>%
+  copy() %>%
+  .[, sign := ifelse(GMAT < gmat_score, 1, 0)] %>%
+  .[, dev := GMAT - 600] %>%
+  .[, .(sign, dev)] %>%
+  .[order(dev)] %>%
+  .[,rank := .I]
+
+tstat <- sum(df[sign == 1, rank])
+
+#P-value is zero and we reject the null hypothesis
+p_2tail(sampdist, tstat)
+
+```
+```{r}
+
+tstat <- quantile(ad$GMAT, 0.75)
+
+
+p_2tail(sampdist, tstat)
+
+```
+
+
+2. A customer complains to the owner of an independent fast-food restaurant that the restaurant is discriminating against the elderly. The customer claims that people 60 years old and older are given fewer french fries than people under 60. The owner responds by gathering data, collected without the knowledge of the employees so as not to affect their behavior. Here are data on the weight of french fries (grams) for the two groups of customers:
+
+Age less than 60: 75 77 80 69 73 76 78 74 75 81 75 80 79 80
+
+Age greater than 60: 68 74 77 71 73 75 80 77 78 72 69 71 75 78
+
+Conduct a nonparametric two-sample test to evaluate the complaint (i.e., whether the average weight is different in the two groups).
+
+```{r}
+
+age <- data.table(under60 = c(75,77,80,69,73,76,78,74,75,81,75,80,79,80),
+                  over60 = c(68,74,77,71,73,75,80,77,78,72,69,71,75,78))
+head(age)
+```
+
+# null hypothesis : There is correlation between The age groups and grams of fries given
+# Since there is no correlation, we can shuffle the vectors and find their correlation to create a sampling distribution.
+# Create a sampling distribution.
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- sample(age$under60, size = nrow(age))
+  s2 <- sample(age$under60, size = nrow(age))
+  
+  sampdist <- append(sampdist, cor(s1, s2, method = "pearson"))
+  
+}
+
+plot(density(sampdist))
+
+```
+
+```{r}
+
+tstat <- cor(age$under60, age$over60, method = "pearson")
+
+p_2tail(sampdist, tstat)
+
+```
+
+result : the p-value is very high, which means that the null hypotthesis cannot be rejected.
+there is a correlation, and the complaint is valid
+
+3. Conduct a parametric and nonparametric test for the population median of price of 300. Which test is more reliable? 
+
+```{r}
+
+re = data.table(readr::read_csv('../../data/Real_estate.csv', show_col_types = FALSE))
+
+head(re)
+
+```
+
+
+```{r}
+
+t.test(re$prices, mu = 300)
+
+```
+
+```{r}
+
+wilcox.test(re$prices, mu = 300)
+
+```
+
+Reliability depends on sample size (Wilcoxon better for smaller samples) and outliers (t-test based on mean which is more affected by outliers).
+
+4. Conduct a nonparametric two-sample test for the hypothesis that the median value of Balance is the same for Blue Collar and White Collar customers. 
+
+```{r}
+
+bk = data.table(readr::read_csv('../../data/UK-Bank-Customers.csv', show_col_types = FALSE))
+
+head(bk)
+
+```
+
+```{r}
+
+bl_col <- bk[`Job Classification` == "Blue Collar"]
+
+head(bl_col)
+median(bl_col$Balance)
+
+```
+
+```{r}
+
+wt_col <- bk[`Job Classification` == "White Collar"]
+
+head(wt_col)
+median(wt_col$Balance)
+
+```
+
+null hypothesis : Median of Blue and White collar employees are the same
+Since there is no correlation, we can shuffle the vectors and find their correlation to create a sampling distribution.
+Create a sampling distribution.
+
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- sample(bl_col$Balance, size = nrow(bl_col))
+  s2 <- sample(bl_col$Balance, size = nrow(bl_col))
+  
+  sampdist <- append(sampdist, cor(s1, s2, method = "pearson"))
+  
+}
+
+plot(density(sampdist))
+
+```
+
+```{r}
+
+tstat <- cor(bl_col$Balance, sample(wt_col$Balance, size = nrow(bl_col)), method = "pearson")
+
+p_2tail(sampdist, tstat)
+
+```
+
+the p-value is too high above threshold, so it is rejected.
+
+5. Use bootstrapping to create the 99% confidence interval for the median value of Balance for Female customers. 
+
+```{r}
+
+fe <- bk[Gender == "Female"]
+head(fe)
+
+```
+
+```{r}
+
+bootsampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- mean(sample(fe$Balance, size = nrow(fe), replace = T))
+  
+  bootsampdist <- append(bootsampdist, s1)
+  
+}
+
+q2 <- quantile(bootsampdist, c(.01/2, 1-(.01/2)))
+
+print(paste0("99% Confidence interval = [", round(q2[1],2), ", ", round(q2[2],2), "]"))
+
+plot(density(bootsampdist))
+
+```
+Read the file Baseball.csv
+
+Use bootstrapping to create the 95% confidence interval for the interquartile range of the variable Average. The interquartile range is the difference between the 75% and 25% percentile values.
+
+```{r}
+
+bb <- data.table(readr::read_csv('../../data/Baseball.csv', show_col_types = FALSE))
+
+head(bb)
+```
+
+
+```{r}
+
+bootsampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- mean(sample(bb$Average, size = nrow(bb), replace = T))
+  
+  bootsampdist <- append(bootsampdist, s1)
+  
+}
+
+q2 <- quantile(bootsampdist, c(.05/2, 1-(.05/2)))
+
+print(paste0("99% Confidence interval = [", round(q2[1],2), ", ", round(q2[2],2), "]"))
+
+plot(density(bootsampdist))
+
+```
+
+Read the file Health.csv.
+
+7.There is a variable called faminc, which indicates the income of the family. Conduct a test for the median value of 1.75 using both parametric and nonparametric tests.
+
+
+```{r}
+
+hl <- data.table(readr::read_csv('../../data/Health.csv', show_col_types = FALSE))
+
+head(hl)
+
+```
+
+```{r}
+
+t.test(hl$faminc, mu = 1.75)
+
+```
+
+```{r}
+
+wilcox.test(hl$faminc, mu = 1.75)
+
+```
+
+8.There are two variables named males and ofp. The second variable refers to the number of office visits made by the patients. Conduct a non-parametric two sample test for the hypothesis that the mean of ofp is the same for both males and females.
+
+
+```{r}
+
+hl_ml <- hl[male == 1]
+hl_fe <- hl[male == 0]
+
+print(summary(hl_ml$ofp))
+print(summary(hl_fe$ofp))
+
+```
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- sample(hl_fe$ofp, size = nrow(hl_fe))
+  s2 <- sample(hl_fe$ofp, size = nrow(hl_fe))
+  
+  sampdist <- append(sampdist, cor(s1, s2, method = "pearson"))
+  
+}
+
+plot(density(sampdist))
+
+```
+
+```{r}
+
+tstat <- cor(hl_ml$ofp, sample(hl_fe$ofp, size = nrow(hl_ml)), method = "pearson")
+
+p_2tail(sampdist, tstat)
+
+```
