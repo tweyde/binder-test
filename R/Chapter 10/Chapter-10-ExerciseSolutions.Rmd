@@ -1,0 +1,176 @@
+---
+title: "Chapter-10-ExerciseSolutions"
+output: html_document
+date: "2022-11-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork)
+
+p_rtail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist > tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_ltail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x > tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist < tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_2tail = function(sampdist, tstat)
+{
+  hyp = mean(sampdist)
+  cutoff1 = hyp - abs(tstat - hyp)
+  cutoff2 = hyp + abs(tstat - hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < cutoff1 | df$temp.x > cutoff2
+  df1 = df[formula1, ]
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist < cutoff1 |
+                             sampdist > cutoff2]) / (length(sampdist))
+  return(pvalue)
+}
+
+```
+
+
+```{r}
+
+covid = data.table(readr::read_csv('../../data/CA COVID.csv', show_col_types = FALSE))
+
+#Make the columns a little easier to work with
+names(covid) <- 
+  names(covid) %>%
+  str_replace_all(., " ", "_") %>%
+  str_replace_all(., "-", "_") %>%
+  tolower()
+
+head(covid)
+
+```
+
+```{r}
+
+covid[, .N, by = "covid_related_resident_deaths"]
+
+```
+
+```{r}
+
+covid_num <- covid
+
+covid_num[covid_num == "<11"] <- 5
+
+covid_num <- 
+  covid_num %>% 
+  .[, !c("county", "facility_name")] %>%
+  mutate_all(as.numeric)
+
+```
+
+
+1.
+
+```{r}
+
+chisq.test(c(166, 1201-166), c(0.15*1201, 0.85*1201))
+
+```
+
+
+2. Are the deaths amongst patients and staff related? 
+
+```{r}
+
+cor(covid_num[, .(covid_related_resident_deaths, covid_related_hcw_deaths)])
+
+```
+
+the correlation coefficient between staff and patient death is very low with 0.18
+
+```{r}
+
+covid_fac <- 
+  covid_num %>%
+  .[, .(covid_related_resident_deaths, covid_related_hcw_deaths)] %>%
+  .[covid_related_resident_deaths == 0, patient_deaths := "none"] %>%
+  .[covid_related_resident_deaths == 5, patient_deaths := "small"] %>%
+  .[covid_related_resident_deaths > 5, patient_deaths := "large"] %>%
+  .[covid_related_hcw_deaths == 0, staff_deaths := "none"] %>%
+  .[covid_related_hcw_deaths == 5, staff_deaths := "small"] %>%
+  .[covid_related_hcw_deaths > 5, staff_deaths := "large"]
+
+chisq.test(covid_fac$patient_deaths, covid_fac$staff_deaths)
+
+```
+
+
+3. Explore the relationship of total available beds with those equipped for isolation. 
+
+```{r}
+
+cor(covid_num[, .(available_beds, available_beds_capable_of_isolation)])
+
+```
+
+```{r}
+
+shapiro.test(covid_num$available_beds_capable_of_isolation)
+
+```
+
+```{r}
+
+shapiro.test(covid_num$available_beds)
+
+```
+
+```{r}
+
+n <- nrow(covid_num)
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- sample(covid_num$available_beds_capable_of_isolation, size = n*2, replace = T)
+  s2 <- sample(covid_num$available_beds, size = n*2, replace = T)
+  
+  sampdist <- append(sampdist, median(s1[1:n], 
+                                      s2[n:n*2]))
+  
+}
+
+tstat <- median(covid_num$available_beds_capable_of_isolation) - median(covid_num$available_beds)
+
+p_2tail(sampdist, tstat)
+
+```
+the null hypotthesis that the numbers of beds avaialbe and equipped are unrelated can be rejected.
