@@ -1,0 +1,297 @@
+---
+title: "Chapter-13-ExerciseSolutions"
+output: html_document
+date: "2022-11-05"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, bbmle)
+
+p_rtail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist > tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_ltail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x > tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist < tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_2tail = function(sampdist, tstat)
+{
+  hyp = mean(sampdist)
+  cutoff1 = hyp - abs(tstat - hyp)
+  cutoff2 = hyp + abs(tstat - hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < cutoff1 | df$temp.x > cutoff2
+  df1 = df[formula1, ]
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist < cutoff1 |
+                             sampdist > cutoff2]) / (length(sampdist))
+  return(pvalue)
+}
+
+covid = data.table(readr::read_csv('../../data/CA COVID.csv', show_col_types = FALSE))
+
+hl = data.table(readr::read_csv('../../data/health.csv', show_col_types = FALSE))
+
+cr = data.table(readr::read_csv('../../data/credit.csv', show_col_types = FALSE))
+
+#Make the columns a little easier to work with
+names(covid) <- 
+  names(covid) %>%
+  str_replace_all(., " ", "_") %>%
+  str_replace_all(., "-", "_") %>%
+  tolower()
+
+```
+
+```{r}
+
+head(covid)
+
+```
+
+Read the file CA.COVID.csv
+
+2.Are independent variables statistically significant? What is the marginal effect of the two independent variables? Are they practically significant? What do you conclude?
+
+```{r}
+
+covid_num <- covid
+
+covid_num[covid_num == "<11"] <- 5
+
+covid_num <- 
+  covid_num %>% 
+  .[, !c("county", "facility_name")] %>%
+  mutate_all(as.numeric)
+
+```
+
+```{r}
+
+LLnorm = function(b0,b1,b2,b3,b4,b5,b6,b7,b8,b9,standdev){
+  mean1 = b0 + b1*covid_num$available_beds + b2*covid_num$available_beds_capable_of_isolation + 
+    b3*covid_num$new_confirmed_positive_residents + b4*covid_num$current_active_cases_residents + 
+    b5*covid_num$covid_related_resident_deaths + b6*covid_num$new_confirmed_positive_hcw +
+    b7*covid_num$current_active_hcw + b8*covid_num$cumulative_positive_hcw +
+    b9*covid_num$covid_related_hcw_deaths
+  p = dnorm(x = covid_num$cumulative_positive_residents, mean = mean1, sd = standdev)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_co_norm_all = mle2(minuslogl = LLnorm, 
+            start = list(b0 = mean(covid_num$cumulative_positive_residents), b1=0,b2=0,b3=0,b4=0,b5=0,b6=0,b7=0,b8=0,b9=0,
+                         standdev = sd(covid_num$cumulative_positive_residents)))
+
+summary(mle_co_norm_all)
+
+```
+
+1.Using the maximum likelihood approach develop a Poisson regression model for the cumulative number of patient infections based on the cumulative number of staff infections and the number of available beds. 
+
+```{r}
+
+LLnorm = function(b0,b1,b2,standdev){
+  mean1 = b0 + b1*covid_num$available_beds + b2*covid_num$covid_related_hcw_deaths
+  p = dnorm(x = covid_num$cumulative_positive_residents, mean = mean1, sd = standdev)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_co_norm = mle2(minuslogl = LLnorm, 
+            start = list(b0 = mean(covid_num$cumulative_positive_residents), b1=0,b2=0,
+                         standdev = sd(covid_num$cumulative_positive_residents)))
+
+summary(mle_co_norm)
+
+```
+
+```{r}
+
+LLpois = function(b0,b1,b2){
+  mean1 = b0 + b1*covid_num$available_beds + b2*covid_num$covid_related_hcw_deaths
+  lam = exp(mean1)
+  p = dpois(x = covid_num$cumulative_positive_residents, lambda = lam)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_po = mle2(minuslogl = LLpois, 
+            start = list(b0 = log(mean(covid_num$cumulative_positive_residents)), b1=0, b2=0))
+
+
+summary(mle_po)
+
+```
+
+3.Compute the AIC and BIC values for both the Poisson regression model and the baseline model.
+
+```{r}
+
+print(paste("Poisson AIC:", AIC(mle_po)))
+print(paste("Normal AIC:", AIC(mle_co_norm)))
+
+
+print(paste("Poisson BIC:", BIC(mle_po)))
+print(paste("Normal BIC:", BIC(mle_co_norm)))
+
+```
+
+
+4.Does the Poisson regression model add value over the baseline model, based on AIC and BIC values?
+
+Based on AIC, lower the better so Poisson is a better estimation. 
+
+
+Read the file Health.csv
+1.	Using the maximum likelihood approach develop a Poisson regression model for the outcome variable ofp based on variables numchron, age, male, married, and employed. 
+
+
+```{r}
+
+head(hl)
+
+```
+
+2.	Which independent variables are statistically significant? What is the marginal effect of the statistically significant independent variables? Are they practically significant? What do you conclude?
+
+```{r}
+
+glm_hl_po <- glm(ofp ~ numchron + age + male + married + employed, family = "poisson", data = hl)
+summary(glm_hl_po)
+
+```
+
+numchron, age and male are the most important veriables
+
+3.	Compute the AIC and BIC values for both the Poisson regression model and the baseline model.
+
+```{r}
+
+glm_hl_gu <- glm(ofp ~ numchron + age + male + married + employed, family = "gaussian", data = hl)
+summary(glm_hl_gu)
+
+```
+
+```{r}
+
+print(paste("Poisson AIC:", AIC(glm_hl_po)))
+print(paste("Normal AIC:", AIC(glm_hl_gu)))
+
+
+print(paste("Poisson BIC:", BIC(glm_hl_po)))
+print(paste("Normal BIC:", BIC(glm_hl_gu)))
+
+
+```
+
+
+4.	Does the Poisson regression model add value over the baseline model, based on AIC and BIC values?
+
+Gaussian model performs better than the Poisson
+
+Read the file Credit.csv
+1.	Using the maximum likelihood approach develop a logistic regression model for the outcome variable Creditworthy based on all the other variables in the dataframe.
+
+
+```{r}
+
+LLpois = function(lam){
+  p = dpois(x = cr$Creditworthy, lambda = lam)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_cr_po = mle2(minuslogl = LLpois, start = list(lam=10))
+summary(mle_cr_po)
+AIC(mle_cr_po)
+
+```
+
+
+```{r}
+
+glm_cr_po <- glm(Creditworthy~1, family = "poisson", data = cr)
+summary(glm_cr_po)
+
+```
+
+
+```{r}
+
+LLbinary = function(b0,b1,b2,b3,b4,b5){
+    X = b0 + b1*cr$Acc1 + b2*cr$Acc2 + b3*cr$Duration + b4*cr$Amount + b5*cr$IntUse
+    pi = exp(X)/(1+(exp(X)))
+    p = ifelse(cr$Creditworthy == 1, pi, 1 - pi)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_cr_lo = mle2(minuslogl = LLbinary, start = list(b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0))
+summary(mle_cr_lo)
+AIC(mle_cr_lo)
+
+
+```
+
+
+```{r}
+
+glm_cr_bi <- glm(Creditworthy ~ ., family = "binomial", data = cr)
+summary(glm_cr_bi)
+
+```
+
+
+
+2.	Which independent variables are statistically significant? What is the marginal effect of the statistically significant independent variables? Are they practically significant? What do you conclude?
+
+Acc1, Acc2 and IntUse are the most important variables
+
+3.	Compute the AIC and BIC values for both the logistic regression model and the baseline model.
+
+```{r}
+
+print(paste("Poisson AIC:", AIC(glm_cr_po)))
+print(paste("Binomial AIC:", AIC(glm_cr_bi)))
+
+
+print(paste("Poisson BIC:", BIC(glm_cr_po)))
+print(paste("Binomial BIC:", BIC(glm_cr_bi)))
+
+
+```
+
+4.	Does the logistic regression model add value over the baseline model, based on AIC and BIC values?
+
+The logistic regression model performs better than the baseline poisson.
