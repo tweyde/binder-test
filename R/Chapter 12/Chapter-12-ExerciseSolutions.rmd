@@ -1,0 +1,256 @@
+---
+title: "Chapter-12-ExerciseSolutions"
+output: html_document
+date: "2022-11-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, bbmle)
+
+p_rtail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist > tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_ltail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x > tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist < tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_2tail = function(sampdist, tstat)
+{
+  hyp = mean(sampdist)
+  cutoff1 = hyp - abs(tstat - hyp)
+  cutoff2 = hyp + abs(tstat - hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < cutoff1 | df$temp.x > cutoff2
+  df1 = df[formula1, ]
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist < cutoff1 |
+                             sampdist > cutoff2]) / (length(sampdist))
+  return(pvalue)
+}
+
+di = data.table(readr::read_csv('../../data/diamonds.csv', show_col_types = FALSE))
+uc = data.table(readr::read_csv('../../data/UsedCars2017.csv', show_col_types = FALSE))
+
+names(uc) <- names(uc) %>% str_replace_all(., " ", "_")
+
+```
+
+
+```{r}
+
+head(di)
+
+```
+
+1.Using the maximum likelihood approach develop a regression model for the outcome variable price based on the independent variables carat, depth, table, x, y, and z.
+
+
+```{r}
+
+ggplot() +
+  geom_histogram(aes(di$price))
+
+```
+
+```{r}
+
+
+LLnorm = function(b0,b1,b2,b3,b4,b5,b6, standdev){
+  mean1 = b0 + b1*di$carat + b2*di$depth + b3*di$table + b4*di$x + b5*di$y + b6*di$z
+  p = dnorm(x = di$price, mean = mean1, sd = standdev)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_di = mle2(minuslogl = LLnorm, 
+            start = list(b0 = 3932,b1 = 0,b2 = 0,b3=0,b4=0,b5=0,b6=0,standdev = 3989))
+
+di$regression_mle = as.matrix(di[,.(carat, depth, table, x, y, z)]) %*%  coef(mle_di)[2:7] + coef(mle_di)[1]
+di$regerror_mle = di$price - di$regression_mle
+
+summary(mle_di)
+
+```
+
+```{r}
+
+lm_di <- lm(price ~ carat + depth + table + x + y + z, data  = di)
+
+di$regression_lm = as.matrix(di[,.(carat, depth, table, x, y, z)]) %*%  coef(lm_di)[2:7] + coef(lm_di)[1]
+di$regerror_lm = di$price - di$regression_lm
+
+summary(lm_di)
+
+```
+
+2.Compute the SST and SSE values. What is the R2 value?
+
+
+```{r}
+
+SST <- sum((di$price - 3932)^2)
+SSE <- sum((di$regression_mle - di$price)^2)
+
+Rsquare = 1 - (SSE/SST)
+round(Rsquare,3)
+
+```
+
+```{r}
+
+SST <- sum((di$price - 3932)^2)
+SSE <- sum((di$regression_lm - di$price)^2)
+
+Rsquare = 1 - (SSE/SST)
+round(Rsquare,3)
+
+```
+
+3.Plot the errors and visually examine if the errors are reasonably normal.
+
+4.Based on a visual plot, assess if there is heteroscedasticity in the regression model.
+
+```{r}
+
+x = seq(1,nrow(di))
+plot(x = x, y = di$regerror_lm, col = "purple", pch = 19, main = "LM Error")
+abline(h=0)
+segments(x,di$regerror_lm,x,0,col = "red")
+
+```
+
+```{r}
+
+x = seq(1,nrow(di))
+plot(x = x, y = di$regerror_mle, col = "purple", pch = 19, main = "MLE Error")
+abline(h=0)
+segments(x,di$regerror_mle,x,0,col = "red")
+
+```
+
+There does appear to be heteroscedasticity since the values of these error values change drastically
+
+5. Read the file UsedCars2017.csv
+
+Using the maximum likelihood approach develop a regression model for the outcome variable Price based on the other variables in the dataframe.
+
+Compute the SST and SSE values. What is the R2 value?
+
+Plot the errors and visually examine if the errors are reasonably normal.
+
+Based on a visual plot, assess if there is heteroscedasticity in the regression model.
+
+```{r}
+
+head(uc)
+
+```
+
+```{r}
+
+ggplot() +
+  geom_histogram(aes(uc$Price))
+
+```
+
+```{r}
+
+
+LLnorm = function(b0,b1,b2,b3,b4,b5, standdev){
+  mean1 = b0 + b1*uc$Age + b2*uc$Mileage + b3*uc$MPG + b4*uc$KBB_Price + b5*uc$CR_Reliability_Score
+  p = dnorm(x = uc$Price, mean = mean1, sd = standdev)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+mle_uc = mle2(minuslogl = LLnorm, 
+            start = list(b0 = mean(uc$Price),b1 = 0,b2 = 0,b3=0,b4=0,b5=0,standdev = sd(uc$Price)))
+
+uc$regression_mle = as.matrix(uc[,.(Age, Mileage, MPG, KBB_Price, CR_Reliability_Score)]) %*%  coef(mle_uc)[2:6] + coef(mle_uc)[1]
+uc$regerror_mle = uc$Price - uc$regression_mle
+
+summary(mle_uc)
+
+```
+
+```{r}
+
+lm_uc <- lm(Price ~ Age + Mileage + MPG + KBB_Price + CR_Reliability_Score, data  = uc)
+
+uc$regression_lm = as.matrix(uc[,.(Age, Mileage, MPG, KBB_Price, CR_Reliability_Score)]) %*%  coef(lm_uc)[2:6] + coef(lm_uc)[1]
+uc$regerror_lm = uc$Price - uc$regression_lm
+
+summary(lm_uc)
+
+```
+
+2.Compute the SST and SSE values. What is the R2 value?
+
+
+```{r}
+
+SST <- sum((uc$Price - 3932)^2)
+SSE <- sum((uc$regression_mle - uc$Price)^2)
+
+Rsquare = 1 - (SSE/SST)
+round(Rsquare,3)
+
+```
+
+```{r}
+
+SST <- sum((uc$Price - 3932)^2)
+SSE <- sum((uc$regression_lm - uc$Price)^2)
+
+Rsquare = 1 - (SSE/SST)
+round(Rsquare,3)
+
+```
+
+```{r}
+
+x = seq(1,nrow(uc))
+plot(x = x, y = uc$regerror_lm, col = "purple", pch = 19, main = "LM Error")
+abline(h=0)
+segments(x,uc$regerror_lm,x,0,col = "red")
+
+```
+
+```{r}
+
+x = seq(1,nrow(uc))
+plot(x = x, y = uc$regerror_mle, col = "purple", pch = 19, main = "MLE Error")
+abline(h=0)
+segments(x,uc$regerror_mle,x,0,col = "red")
+
+```

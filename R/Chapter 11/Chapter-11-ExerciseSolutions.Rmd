@@ -1,0 +1,159 @@
+---
+title: "Chapter-11-ExerciseSolutions"
+output: html_document
+date: "2022-11-04"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, bbmle)
+
+p_rtail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist > tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_ltail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x > tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist < tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_2tail = function(sampdist, tstat)
+{
+  hyp = mean(sampdist)
+  cutoff1 = hyp - abs(tstat - hyp)
+  cutoff2 = hyp + abs(tstat - hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < cutoff1 | df$temp.x > cutoff2
+  df1 = df[formula1, ]
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist < cutoff1 |
+                             sampdist > cutoff2]) / (length(sampdist))
+  return(pvalue)
+}
+
+```
+
+```{r}
+
+db <- data.table(readr::read_csv('../../data/diabetes2.csv', show_col_types = FALSE))
+head(db)
+
+```
+
+1. Assuming that the variable Pregnancies follows a Poisson distribution, obtain the maximum likelihood estimate of the mean of the distribution. 
+
+```{r}
+
+mean(db$Pregnancies)
+
+```
+
+```{r}
+
+plot(density(dpois(sample(db$Pregnancies, size = 200), lambda = 4)))
+
+```
+
+1. What is the 95% confidence interval for the parameter? 
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- mean(sample(db$Pregnancies, replace = T, size = nrow(db)))
+  
+  sampdist <- append(sampdist, s1)
+  
+}
+
+plot(density(sampdist))
+
+```
+
+```{r}
+
+q1 <- quantile(sampdist, 0.95)
+
+q2 <- quantile(sampdist, 0.05)
+
+ggplot() +
+  geom_density(aes(sampdist), color = "blue") +
+  geom_vline(aes(xintercept = q1), color = "red") +
+  geom_vline(aes(xintercept = q2), color = "red")
+
+```
+
+3. Assuming that the variable BMI follows a normal distribution, obtain the maximum likelihood estimate of the mean and the standard deviation. 
+
+```{r}
+
+sampdist <- vector()
+
+for (i in 1:10000) {
+  
+  s1 <- mean(sample(db$BMI, replace = T, size = nrow(db)))
+  
+  sampdist <- append(sampdist, s1)
+  
+}
+
+plot(density(sampdist))
+
+```
+
+```{r}
+
+q1 <- quantile(sampdist, 0.95)
+
+q2 <- quantile(sampdist, 0.05)
+
+ggplot() +
+  geom_density(aes(sampdist), color = "blue") +
+  geom_vline(aes(xintercept = q1), color = "red") +
+  geom_vline(aes(xintercept = q2), color = "red")
+
+```
+
+
+5. Using the maximum likelihood approach estimate the population parameter for the binary variable Outcome. 
+
+```{r warning=FALSE}
+LLbinary = function(pi){
+  p = ifelse(db$Outcome == 1, pi, 1 - pi)
+  LL = sum(log(p))
+  return(-1*LL)
+}
+
+res1 = mle2(minuslogl = LLbinary, start = list(pi= .5))
+summary(res1)
+```
+
