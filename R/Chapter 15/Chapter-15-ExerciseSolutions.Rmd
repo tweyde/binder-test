@@ -1,0 +1,122 @@
+---
+title: "Chapter-15-ExerciseSolutions"
+output: html_document
+date: "2022-11-07"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, xts, forecast, MTS)
+
+nsa = data.table(readr::read_csv('../../data/TOTALNSA.csv', show_col_types = FALSE))
+
+```
+
+
+1.	Read the file TOTALNSA.csv. Decompose the series into trend, seasonality and noise.
+
+```{r}
+
+nsa_ts <- ts(nsa$TOTALNSA, frequency = 12, start = c(1976, 01, 01), end = c(2022, 04, 01))
+
+```
+
+
+```{r}
+
+nsa_ts_decom <- decompose(nsa_ts)
+
+plot(nsa_ts_decom)
+
+```
+
+
+2.	We want to know the trend growth in vehicle sales over the past 5 years, with seasonality removed. Use a MA to do this and calculate the average trend growth as a number. The timeseries is seasonal. Remove the seasonality from the timeseries using statsmodels seasonal_decompose function, to create a seasonality adjusted (SA) vehicle sales timeseries. 
+
+Use linear extrapolation, using the statsmodel.interpolate function or similar to forecast, applied to SA vehicle sales, to forecast vehicle sales in 12months time. 
+
+```{r}
+
+autoplot(nsa_ts) +
+autolayer(ma(nsa_ts, order = 12), colour = TRUE) 
+
+```
+
+```{r}
+
+nsa_adj <- nsa_ts - nsa_ts_decom$seasonal
+
+plot(nsa_adj)
+
+```
+
+```{r}
+
+print(paste("Average Growth Rate:" ,round(digits = 2, mean(na.omit(as.numeric(nsa_adj) - lag(as.numeric(nsa_adj)))))))
+
+```
+
+```{r}
+
+nsa_ma <- ma(nsa_ts, order = 12)
+nsa_ma <- ts(na.exclude(nsa_ma))
+nsa_fcst <- forecast(nsa_ma, level = c(0), h=36)
+autoplot(nsa_fcst)
+
+
+```
+
+
+3.	Remove the trend from SA vehicles sales you calculated using differencing
+
+```{r}
+
+nsa_stat <- MTS::diffM(nsa_ts)
+
+plot.ts(nsa_stat)
+
+```
+
+
+4.	Use our auto_ARIMA function on the SA vehicles sales, forecast seasonally adjusted, changes in detrended sales in 24months time. Also plot residuals of your model, and present statistics showing the goodness of fit.
+
+```{r}
+
+nsa_arima <- forecast::auto.arima(nsa_ma)
+
+summary(nsa_arima)
+
+```
+
+``` {r}
+
+fcst_nsa <- forecast::forecast(nsa_arima, 24)
+
+fcst_nsa
+
+```
+
+
+```{r}
+
+plot(fcst_nsa)
+
+```
+
+```{r}
+
+
+forecast::checkresiduals(fcst_nsa)
+
+```
+
