@@ -1,0 +1,262 @@
+---
+title: "Chapter-14-ExerciseSolutions"
+output: html_document
+date: "2022-11-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, bbmle)
+
+p_rtail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist > tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_ltail = function(sampdist, tstat)
+{
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x > tstat
+  df1 = df[formula1, ]
+  plot(df, col = "red", type = "h")
+  points(df1, col = "green", type = "h")
+  pvalue = length(sampdist[sampdist < tstat]) / (length(sampdist))
+  return(pvalue)
+}
+
+p_2tail = function(sampdist, tstat)
+{
+  hyp = mean(sampdist)
+  cutoff1 = hyp - abs(tstat - hyp)
+  cutoff2 = hyp + abs(tstat - hyp)
+  temp = density(sampdist)
+  df = data.frame(temp$x, temp$y)
+  formula1 = df$temp.x < cutoff1 | df$temp.x > cutoff2
+  df1 = df[formula1, ]
+  plot(df, col = "green", type = "h")
+  points(df1, col = "red", type = "h")
+  pvalue = length(sampdist[sampdist < cutoff1 |
+                             sampdist > cutoff2]) / (length(sampdist))
+  return(pvalue)
+}
+
+corn = data.table(readr::read_csv('../../data/Corn.csv', show_col_types = FALSE))
+wm = data.table(readr::read_csv('../../data/women.csv', show_col_types = FALSE))
+bo = data.table(readr::read_csv('../../data/Boston.csv', show_col_types = FALSE))
+st = data.table(readr::read_csv('../../data/student.csv', show_col_types = FALSE))
+cr = data.table(readr::read_csv('../../data/credit.csv', show_col_types = FALSE))
+
+cr <- cr[, Creditworthy := factor(Creditworthy)] %>%
+  .[, Acc1 := factor(Acc1)] %>%
+  .[, Acc2 := factor(Acc2)] %>%
+  .[, IntUse := factor(IntUse)]
+
+```
+
+Exercises
+1.	Read the file Corn.csv. Develop an appropriate regression structure to predict yield. 
+
+
+```{r}
+
+head(corn)
+
+```
+
+```{r}
+
+cor(corn)
+
+```
+
+
+```{r}
+
+lm_corn <- lm(yield ~ nitrate, data = corn)
+summary(lm_corn)
+
+```
+
+
+```{r}
+plot (corn)
+abline(lm_corn , lwd = 3, col = "red")
+
+```
+
+
+
+```{r}
+
+plot(resid(lm_corn))
+
+```
+
+```{r}
+
+y_pred <- predict(lm_corn) 
+residuals <- y_pred - corn$yield
+
+plot(y_pred, residuals)
+
+```
+
+2.	Read the file women.csv. Develop an appropriate regression structure to predict height. 
+
+
+```{r}
+
+head(wm)
+
+```
+
+```{r}
+
+cor(wm)
+
+```
+
+
+```{r}
+
+lm_wm <- lm(height ~ weight, data = wm)
+summary(lm_wm)
+
+```
+
+
+```{r}
+plot (wm$weight, wm$height)
+abline(lm_wm , lwd = 3, col = "red")
+
+```
+
+```{r}
+
+y_pred <- predict(lm_wm) 
+residuals <- y_pred - wm$height
+
+plot(y_pred, residuals)
+
+```
+
+3.	Read the file Boston.csv. Develop an appropriate regression structure to predict medv which is the median value of incomes in neighborhoods of the city of Boston. 
+
+```{r}
+
+head(bo)
+
+```
+
+```{r}
+
+cor(bo)
+
+```
+
+
+```{r}
+
+bo_sc <- data.table(scale(bo))
+
+lm_bo <- lm(medv ~ ., data = bo_sc)
+summary(lm_bo)
+
+```
+
+
+```{r}
+
+y_pred <- predict(lm_bo) 
+residuals <- y_pred - bo$medv
+
+plot(y_pred, residuals)
+
+```
+
+4.	Read the file student.csv. Develop an appropriate regression structure to predict daysabs. Note that the outcome is a count variable and therefore you must develop a Poisson regression for the problem.
+
+
+```{r}
+
+head(st)
+
+```
+
+```{r}
+
+cor(st)
+
+```
+
+
+```{r}
+
+glm_st <- glm(daysabs ~ . , data = st[, !c("id")], family = "poisson") 
+summary(glm_st)
+
+```
+
+
+
+```{r}
+
+plot(resid(glm_st))
+
+```
+
+```{r}
+
+y_pred <- predict(glm_st) 
+residuals <- y_pred - st$daysabs
+
+plot(y_pred, residuals)
+
+```
+
+
+5.	Read the file Credit.csv. Develop an appropriate regression structure to predict the binary outcome Creditworthy based on all the other variables in the dataframe.
+
+```{r}
+
+head(cr)
+
+```
+
+```{r}
+
+cor(cr)
+
+```
+
+
+```{r}
+
+glm_cr <- glm(Creditworthy ~ . , data = cr, family = binomial(link = "logit")) 
+summary(glm_cr)
+
+```
+
+```{r}
+
+caret::confusionMatrix(reference = cr$Creditworthy, data = factor(ifelse(predict(glm_cr) > 0.5, 1, 0)))
+
+```
