@@ -35,7 +35,7 @@ This is likely to be the most complicated use case thus far in the book. Student
 * Remind students to read the textual data as strings.
 
 ```{r}
-df <- read.csv("C:/Users/rgopal/Google Drive/Maya R/googleplaystore.csv",stringsAsFactors = T)
+df <- read.csv("../../data/googleplaystore.csv",stringsAsFactors = T)
 ```
 
 *Quick peek of the data. Illustrates that a number of inherently numeric variables have been read as categorical which need to be fixed.
@@ -91,16 +91,16 @@ table(complete.cases(df))
 ```{r}
 library(caret)
 library(rpart)
-dtmodel <- train(Rating ~ ., method = "rpart", data = df,
- trControl=trainControl(method = 'cv',number = 20))                                  
+dtmodel <- train(Rating ~ ., method = "rpart", data = df)
+#, trControl=trainControl(method = 'cv',number = 20))                                  
 fancyRpartPlot(dtmodel$finalModel,main = "Decision Tree",sub = "")       
 ```
 
 
 ## Building a Decision Tree model for the FAMILY Category
 ```{r}
-dtmodel_family <- train(Rating ~ ., method = "rpart", data = df[df$Category=="FAMILY",],
- trControl=trainControl(method = 'cv',number = 20))  
+dtmodel_family <- train(Rating ~ ., method = "rpart", data = df[df$Category=="FAMILY",])
+# trControl=trainControl(method = 'cv',number = 20))  
 fancyRpartPlot(dtmodel_family$finalModel,main = "Decision Tree",sub = "")
 ```
 

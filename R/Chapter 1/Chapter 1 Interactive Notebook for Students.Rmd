@@ -3,10 +3,10 @@ title: 'Chapter 1: Interactive Notebook for Students'
 author: "Ram Gopal, Dan Philps, and Tillman Weyde"
 date: "Summer 2022"
 output:
-  word_document:
+  pdf_document:
     toc: yes
     toc_depth: '4'
-  pdf_document:
+  word_document:
     toc: yes
     toc_depth: '4'
   html_document:
