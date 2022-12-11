@@ -1,0 +1,575 @@
+---
+title: "Chapter-19-ExerciseSolutions"
+output: html_document
+date: "2022-12-09"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#If install of package loader is required then isntall it
+if (!require(pacman)) {
+  install.packages("pacman")
+}
+
+# Changes any scientific number notation to normal
+options(scipen = 999) 
+
+#Load extra packages
+pacman::p_load(data.table, tidyverse, lubridate, patchwork, 
+               MASS, magrittr, readr, plm, GGally, tictoc, caret, rpart, kknn, rattle,
+               ggimage, rsvg, cvms, dslabs, RCurl)
+
+mnist <- dslabs::read_mnist()
+
+#di = data.table(readr::read_csv('../../data/diamonds.csv', show_col_types = FALSE))
+
+```
+
+## Exercise 1
+
+Implement your own version of the classification metrics precision, recall and F1 score.
+
+```{r}
+
+# ground truth labels: 1 is our positive class, which is the class we want to detect (e.g., spam email, malignus cancer)
+true = c(0, 2, 1, 0, 1, 1, 0, 0, 1, 2)
+# predicted labels 
+pred = c(0, 1, 0, 0, 0, 1, 1, 0, 1, 0)
+
+```
+
+In the above example, out of 10 labels our classifier predicted:
+
+    2 true positives
+    2 false positives
+    4 true negatives
+    2 false negatives
+
+### Precision
+
+The precision is the ratio tp / (tp + fp) where tp is the number of true positives and fp the number of false positives and measures the ability of a classifier of not labeling as positive a sample that is negative.
+
+```{r}
+
+tp <- sum((true == 1) & (pred == 1))
+fp <- sum((true != 1) & (pred == 1))
+
+precision <- tp / (tp + fp)
+
+print(paste("Precision:", precision))
+
+```
+
+Recall
+
+The recall is the ratio tp / (tp + fn) where tp is the number of true positives and fn the number of false negatives and measures the ability of the classifier to identify all the positive samples.
+
+
+```{r}
+
+tp <- sum((true == 1) & (pred == 1))
+fn <- sum((true == 1) & (pred != 1))
+
+recall <- tp / (tp + fn)
+
+print(paste(recall))
+
+```
+
+F1 Score
+
+The F1 score is the harmonic mean of precision and recall: 2 * (precision * recall) / (precision + recall) hence measures the model performance as a function of precision and recall.
+
+```{r}
+
+
+print(paste("F1 Score:", 2 * (precision * recall) / (precision + recall)))
+```
+
+## Exercise 2
+
+Load the digits dataset and test the classifiers introduced in this chapter on it.
+Dataset
+
+Data Preparation
+
+We start creating the train and test sets:
+
+```{r}
+
+X_trn <- mnist$train$images
+y_trn <- mnist$train$labels
+
+X_tst <- mnist$test$images
+y_tst <- mnist$test$labels
+
+ind_trn <- sample(1:length(y_trn), size = 1257)#1257
+y_trn_sml <- y_trn[ind_trn] 
+X_trn_sml <- X_trn[ind_trn,] 
+
+ind_tst <- sample(1:length(y_tst), size = 540)
+y_tst_sml <- y_tst[ind_tst] 
+X_tst_sml <- X_tst[ind_tst,] 
+
+```
+
+We normalise the features:
+
+```{r}
+
+# X_trn_sml_scl <- scale(X_trn_sml)
+# X_tst_sml_scl <- scale(X_tst_sml)
+
+scale_custom <- function(y, mn, std_dev) {
+  
+  if (y != 0) {
+    
+    return((y - mn) / std_dev)
+    
+  } else {
+    
+    return(0)
+    
+  }
+  
+}
+
+mn = mean(X_trn_sml)
+std_dev = sd(X_trn_sml)
+
+X_trn_sml_scl <- apply(X_trn_sml, c(1, 2), function(y) scale_custom(y, mn, std_dev))
+
+mn = mean(X_tst_sml)
+std_dev = sd(X_tst_sml)
+
+X_tst_sml_scl <- apply(X_tst_sml, c(1, 2), function(y) scale_custom(y, mn, std_dev))
+
+trn <- data.table(cbind(X_trn_sml_scl, as.matrix(y_trn_sml))) %>% 
+  .[,V785 := factor(V785)] %>%
+  setnames(old = "V785", new = "label")
+
+tst <- data.table(cbind(X_tst_sml_scl, as.matrix(y_tst_sml))) %>% 
+  .[,V785 := factor(V785)] %>%
+  setnames(old = "V785", new = "label")
+
+```
+
+### Models Training and Testing
+
+#### Naive Bayes
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+
+nb_reg = caret::train(label ~ .,   method='naive_bayes',
+             trControl  = trControl,
+             data = trn,
+             metric = "Accuracy")
+
+nb_reg_pred_train = predict(nb_reg)
+nb_reg_pred_test = predict(nb_reg, tst)
+train_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_train,trn$label)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_test,tst$label)$overall[1]
+print(paste("Naive Bayes: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+
+#caret::confusionMatrix(nb_reg_pred_test,tst$label)
+```
+
+####Multi Layer Perceptron
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+mlp_reg = caret::train(label ~ .,   method='mlp',
+             trControl  = trControl,
+             data = trn,
+             metric = "Accuracy")
+mlp_reg_pred_train = predict(mlp_reg)
+mlp_reg_pred_test = predict(mlp_reg, tst)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,trn$label)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,tst$label)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Logistic Regression
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+lr_reg = caret::train(label ~ .,   method='LogitBoost',
+             trControl  = trControl,
+             data = trn,
+             metric = "Accuracy")
+lr_reg_pred_train = predict(lr_reg)
+lr_reg_pred_test = predict(lr_reg, tst)
+train_accuracy = 
+  caret::confusionMatrix(lr_reg_pred_train,trn$label)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(lr_reg_pred_test,tst$label)$overall[1]
+print(paste("Logistic Regression: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Decision Tree
+
+```{r}
+trControl <- trainControl(method  = "cv", number  = 2)
+dt_reg = caret::train(label ~ .,   method='rpart2',
+             trControl  = trControl,
+             data = trn,
+             metric = "Accuracy")
+dt_reg_pred_train = predict(dt_reg)
+dt_reg_pred_test = predict(dt_reg, tst)
+train_accuracy = 
+  caret::confusionMatrix(dt_reg_pred_train,trn$label)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(dt_reg_pred_test,tst$label)$overall[1]
+print(paste("Decision Tree: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+## Exercise 3
+
+Implement parameter tuning on the digits datasets for the logistic regression and the MLP classifier.
+Tuning the Logistic Regression
+
+### Model Tuning
+
+#### Multi Layer Perceptron
+
+```{r}
+trControl <- trainControl(method  = "repeatedcv", number  = 5)
+mlp_reg = caret::train(label ~ .,   method='mlpWeightDecay',
+             trControl  = trControl,
+             data = trn,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(size = 3:6, decay = c(0.01, 0.001, 0.0001, 0.00001))
+             )
+mlp_reg_pred_train = predict(mlp_reg)
+mlp_reg_pred_test = predict(mlp_reg, tst)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,trn$label)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,tst$label)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+#### Logistic Regression
+
+```{r}
+trControl <- trainControl(method  = "repeatedcv", number  = 5)
+lr_reg = caret::train(label ~ .,   method='LogitBoost',
+             trControl  = trControl,
+             data = trn,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(nIter = seq(10,100,10))
+             )
+mlp_reg_pred_train = predict(mlp_reg)
+mlp_reg_pred_test = predict(mlp_reg, tst)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,trn$label)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,tst$label)$overall[1]
+print(paste("Logistic Regression: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+
+Exercise 4
+
+Load the Wisconsin breast cancer dataset and predict the tumor type. Use different models, tune their hyper-parameters, select the best model and estimate its performance on new data. Justify the choices or methods and models.
+Dataset
+
+```{r}
+
+UCI_data_URL <- getURL('https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/wdbc.data')
+names <- c('id_number', 'diagnosis', 'radius_mean', 
+         'texture_mean', 'perimeter_mean', 'area_mean', 
+         'smoothness_mean', 'compactness_mean', 
+         'concavity_mean','concave_points_mean', 
+         'symmetry_mean', 'fractal_dimension_mean',
+         'radius_se', 'texture_se', 'perimeter_se', 
+         'area_se', 'smoothness_se', 'compactness_se', 
+         'concavity_se', 'concave_points_se', 
+         'symmetry_se', 'fractal_dimension_se', 
+         'radius_worst', 'texture_worst', 
+         'perimeter_worst', 'area_worst', 
+         'smoothness_worst', 'compactness_worst', 
+         'concavity_worst', 'concave_points_worst', 
+         'symmetry_worst', 'fractal_dimension_worst')
+breast_cancer <- read.table(textConnection(UCI_data_URL), sep = ',', col.names = names)
+
+breast_cancer$id_number <- NULL
+
+
+set.seed(42)
+trainIndex <- createDataPartition(breast_cancer$diagnosis, 
+                                  p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+trn_bc <- data.table(breast_cancer[ trainIndex, ])
+tst_bc <- data.table(breast_cancer[ -trainIndex, ])
+
+y_tst_bc = factor(tst_bc$diagnosis)
+y_trn_bc = factor(trn_bc$diagnosis)
+
+X_trn_bc <- trn_bc[, !c("diagnosis")]
+X_tst_bc <- tst_bc[, !c("diagnosis")]
+
+trControl <- trainControl(method  = "repeatedcv", number  = 5)
+
+```
+
+We normalise the features:
+
+```{r}
+
+X_trn_scl_bc <- data.table(scale(X_trn_bc))
+X_tst_scl_bc <- data.table(scale(X_tst_bc))
+
+trn_bc_scl <- cbind(data.table(diagnosis = y_trn_bc), X_trn_scl_bc)
+tst_bc_scl <- cbind(data.table(diagnosis = y_tst_bc), X_tst_scl_bc)
+
+```
+
+### Models Training and Testing
+
+#### Naive Bayes
+
+```{r}
+
+nb_reg = caret::train(diagnosis ~ .,   method='naive_bayes',
+             trControl  = trControl,
+             data = trn_bc_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(laplace = c(1e-09, 1e-08, 1e-07, 0), usekernel= c(F, T), adjust = 1))
+
+nb_reg_pred_train = predict(nb_reg)
+nb_reg_pred_test = predict(nb_reg, tst_bc_scl)
+train_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_train,y_trn_bc)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_test,y_tst_bc)$overall[1]
+print(paste("Naive Bayes: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Multi Layer Perceptron
+
+```{r}
+mlp_reg = caret::train(diagnosis ~ .,   method='mlpWeightDecay',
+             trControl  = trControl,
+             data = trn_bc_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(size = 3:6, decay = c(0.01, 0.001, 0.0001, 0.00001)))
+
+mlp_reg_pred_train = predict(mlp_reg)
+mlp_reg_pred_test = predict(mlp_reg, tst_bc_scl)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,y_trn_bc)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,y_tst_bc)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Logistic Regression
+
+```{r}
+lr_reg = caret::train(diagnosis ~ .,   method='LogitBoost',
+             trControl  = trControl,
+             data = trn_bc_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(nIter = seq(10,100,10)))
+
+lr_reg_pred_train = predict(lr_reg)
+lr_reg_pred_test = predict(lr_reg, tst_bc_scl)
+train_accuracy = 
+  caret::confusionMatrix(lr_reg_pred_train,y_trn_bc)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(lr_reg_pred_test,y_tst_bc)$overall[1]
+print(paste("Logistic Regression: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Decision Tree
+
+```{r}
+dt_reg = caret::train(diagnosis ~ .,   method='rpart2',
+             trControl  = trControl,
+             data = trn_bc_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(maxdepth = 1:10))
+
+dt_reg_pred_train = predict(dt_reg)
+dt_reg_pred_test = predict(dt_reg, tst_bc_scl)
+train_accuracy = 
+  caret::confusionMatrix(dt_reg_pred_train,y_trn_bc)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(dt_reg_pred_test,y_tst_bc)$overall[1]
+print(paste("Decision Tree: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+```{r}
+
+caret::confusionMatrix(mlp_reg_pred_train,y_trn_bc)
+
+```
+
+We need to be careful because the way the dataset is labelled could be misleading: malignant, which is the positive class and the one we want to detect, is labelled as 0 (counterintuitively) and benign as 1. We can use the functions we previously built to measure our model performance, and perhaps better understand the above confusion matrix:
+
+Our model returns 0 false positives (high precision) but misses to identify malignant tumors (false negatives). This is not an optimal model behaviour because in a real setting this would mean misdiagnosing people with a malignant cancer. In this scenario, we would rather have a lower precision but a better recall. Better safe than sorry...
+
+## Exercise 5
+
+Load the Covertype dataset and predict the classes. Model this multi-class problem with different models and determine their optimal hyper-parameters, select the best model and estimate its performance on new data. Justify the choices or methods and models.
+
+```{r}
+
+cv <- fread('../../data/covertype.csv') 
+
+
+set.seed(42)
+trainIndex <- createDataPartition(cv$class, 
+                                  p = .8, 
+                                  list = FALSE, 
+                                  times = 1)
+
+trn_cv <- data.table(cv[ trainIndex, ])
+tst_cv <- data.table(cv[ -trainIndex, ])
+
+y_tst_cv = factor(tst_cv$class)
+y_trn_cv = factor(trn_cv$class)
+
+X_trn_cv <- trn_cv[, !c("class")]
+X_tst_cv <- tst_cv[, !c("class")]
+
+trControl <- trainControl(method  = "repeatedcv", number  = 5)
+
+```
+
+We normalise the features:
+
+```{r}
+
+X_trn_scl_cv <- data.table(scale(X_trn_cv))
+X_tst_scl_cv <- data.table(scale(X_tst_cv))
+
+trn_cv_scl <- cbind(data.table(class = y_trn_cv), X_trn_scl_cv)
+tst_cv_scl <- cbind(data.table(class = y_tst_cv), X_tst_scl_cv)
+
+is.nan.data.frame <- function(x)
+do.call(cbind, lapply(x, is.nan))
+
+tst_cv_scl[is.nan(tst_cv_scl)] <- 0
+trn_cv_scl[is.nan(trn_cv_scl)] <- 0
+
+```
+
+### Models Training and Testing
+
+#### Naive Bayes
+
+```{r}
+
+nb_reg = caret::train(class ~ .,   method='naive_bayes',
+             trControl  = trControl,
+             data = trn_cv_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(laplace = c(1e-09, 1e-08, 1e-07, 0), usekernel= c(F, T), adjust = 1))
+
+nb_reg_pred_train = predict(nb_reg)
+nb_reg_pred_test = predict(nb_reg, tst_cv_scl)
+train_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_train,y_trn_cv)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(nb_reg_pred_test,y_tst_cv)$overall[1]
+print(paste("Naive Bayes: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Multi Layer Perceptron
+
+```{r}
+mlp_reg = caret::train(class ~ .,   method='mlpWeightDecay',
+             trControl  = trControl,
+             data = trn_cv_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(size = 3:6, decay = c(0.01, 0.001, 0.0001, 0.00001)))
+
+mlp_reg_pred_train = predict(mlp_reg)
+mlp_reg_pred_test = predict(mlp_reg, tst_cv_scl)
+train_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_train,y_trn_cv)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(mlp_reg_pred_test,y_tst_cv)$overall[1]
+print(paste("MLP: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Logistic Regression
+
+```{r}
+lr_reg = caret::train(class ~ .,   method='LogitBoost',
+             trControl  = trControl,
+             data = trn_cv_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(nIter = seq(10,100,10)))
+
+lr_reg_pred_train = predict(lr_reg)
+lr_reg_pred_test = predict(lr_reg, tst_cv_scl)
+train_accuracy = 
+  caret::confusionMatrix(lr_reg_pred_train,y_trn_cv)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(lr_reg_pred_test,y_tst_cv)$overall[1]
+print(paste("Logistic Regression: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+####Decision Tree
+
+```{r}
+dt_reg = caret::train(class ~ .,   method='rpart2',
+             trControl  = trControl,
+             data = trn_cv_scl,
+             metric = "Accuracy",
+             tuneGrid = expand.grid(maxdepth = 1:10))
+
+dt_reg_pred_train = predict(dt_reg)
+dt_reg_pred_test = predict(dt_reg, tst_cv_scl)
+train_accuracy = 
+  caret::confusionMatrix(dt_reg_pred_train,y_trn_cv)$overall[1]
+test_accuracy = 
+  caret::confusionMatrix(dt_reg_pred_test,y_tst_cv)$overall[1]
+print(paste("Decision Tree: ",
+                "Training = ", train_accuracy,
+                " Test = ",test_accuracy))
+```
+
+```{r}
+
+caret::confusionMatrix(mlp_reg_pred_train,y_trn_cv)
+
+```
+
+We notice how classes 3,4 and 5, which are the ones with the least samples, are the most challenging for the model to predict. If we wanted to improve the model performance on such classes, we should deal with the classes imbalance, as explained in the book (e.g., using SMOTE). 
